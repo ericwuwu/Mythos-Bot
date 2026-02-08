@@ -3,10 +3,10 @@ import random
 import discord
 from discord.ext import commands
 
-# Bot setup - Changed from '/' to '$'
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='$', intents=intents)  # CHANGED HERE
+bot = commands.Bot(command_prefix='$', intents=intents)
 
 # Cards
 CARDS = [
@@ -33,54 +33,80 @@ async def on_ready():
 
 @bot.command()
 async def d(ctx):
+    """Draw 4 cards"""
     hands[str(ctx.author.id)] = draw()
     await ctx.send(show(hands[str(ctx.author.id)]))
 
 @bot.command()
 async def x(ctx, *nums):
+    """Replace cards: $x 1 3"""
     user = str(ctx.author.id)
     if user not in hands:
-        await ctx.send("Use $d first!")  # CHANGED HERE
+        await ctx.send("Use $d first!")
         return
     cards = hands[user].copy()
-    for n in nums:
-        i = int(n) - 1
-        if 0 <= i < 4:
-            cards[i] = random.choice(CARDS)
-    hands[user] = cards
-    await ctx.send(show(cards))
+    try:
+        for n in nums:
+            i = int(n) - 1
+            if 0 <= i < 4:
+                cards[i] = random.choice(CARDS)
+        hands[user] = cards
+        await ctx.send(show(cards))
+    except ValueError:
+        await ctx.send("Use numbers 1-4: $x 1 3")
 
 @bot.command()
-async def show(ctx):  # Renamed from showcmd to show
+async def show(ctx):
+    """Show your cards"""
     user = str(ctx.author.id)
     if user in hands:
         await ctx.send(show(hands[user]))
     else:
-        await ctx.send("Use $d first")  # CHANGED HERE
+        await ctx.send("Use $d first")
 
 @bot.command()
 async def helpme(ctx):
+    """Show help"""
     text = """**Commands:**
 $d - Draw 4 cards
 $x 1 3 - Replace cards 1 and 3
 $show - See your cards
-$helpme - This message"""  # CHANGED ALL / TO $
+$helpme - This message
+    
+**Other:**
+roll d20 - Roll a dice
+:sob: - Get 'L' response"""
     await ctx.send(text)
 
 @bot.event
-async def on_message(msg):
-    if msg.author == bot.user:
+async def on_message(message):
+    if message.author == bot.user:
         return
-    if msg.content.startswith('roll d20'):
+    
+    # Dice roll
+    if message.content.lower().startswith('roll d20'):
         r = random.randint(1, 20)
-        await msg.channel.send(f'🎲 Rolled: {r}')
-    if ":sob:" in msg.content:
-        await msg.channel.send("L")
-    await bot.process_commands(msg)
+        if r == 1:
+            response = f'🎲 Rolled **{r}** - Critical fail!'
+        elif r == 20:
+            response = f'🎲 Rolled **{r}** - NATURAL 20! 🎉'
+        elif r < 10:
+            response = f'🎲 Rolled **{r}** - get fucked lmao!'
+        else:
+            response = f'🎲 Rolled **{r}** - not bad!'
+        await message.channel.send(response)
+    
+    # Sob emoji
+    if ":sob:" in message.content:
+        await message.channel.send("L")
+    
+    # Process commands
+    await bot.process_commands(message)
 
 # Get token from Railway environment variable
 TOKEN = os.environ.get("DISCORD_TOKEN")
 if not TOKEN:
     print("❌ ERROR: Set DISCORD_TOKEN environment variable!")
+    print("In Railway: Variables → Add DISCORD_TOKEN")
 else:
     bot.run(TOKEN)
