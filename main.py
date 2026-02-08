@@ -33,31 +33,25 @@ async def on_ready():
 
 @bot.command()
 async def d(ctx):
-    """Draw 4 cards"""
     hands[str(ctx.author.id)] = draw()
     await ctx.send(show(hands[str(ctx.author.id)]))
 
 @bot.command()
 async def x(ctx, *nums):
-    """Replace cards: $x 1 3"""
     user = str(ctx.author.id)
     if user not in hands:
         await ctx.send("Use $d first!")
         return
     cards = hands[user].copy()
-    try:
-        for n in nums:
-            i = int(n) - 1
-            if 0 <= i < 4:
-                cards[i] = random.choice(CARDS)
-        hands[user] = cards
-        await ctx.send(show(cards))
-    except ValueError:
-        await ctx.send("Use numbers 1-4: $x 1 3")
+    for n in nums:
+        i = int(n) - 1
+        if 0 <= i < 4:
+            cards[i] = random.choice(CARDS)
+    hands[user] = cards
+    await ctx.send(show(cards))
 
 @bot.command()
-async def show(ctx):
-    """Show your cards"""
+async def showcmd(ctx):
     user = str(ctx.author.id)
     if user in hands:
         await ctx.send(show(hands[user]))
@@ -66,47 +60,27 @@ async def show(ctx):
 
 @bot.command()
 async def helpme(ctx):
-    """Show help"""
     text = """**Commands:**
 $d - Draw 4 cards
 $x 1 3 - Replace cards 1 and 3
 $show - See your cards
-$helpme - This message
-    
-**Other:**
-roll d20 - Roll a dice
-:sob: - Get 'L' response"""
+$helpme - This message"""
     await ctx.send(text)
 
 @bot.event
-async def on_message(message):
-    if message.author == bot.user:
+async def on_message(msg):
+    if msg.author == bot.user:
         return
-    
-    # Dice roll
-    if message.content.lower().startswith('roll d20'):
+    if msg.content.startswith('roll d20'):
         r = random.randint(1, 20)
-        if r == 1:
-            response = f'🎲 Rolled **{r}** - Critical fail!'
-        elif r == 20:
-            response = f'🎲 Rolled **{r}** - NATURAL 20! 🎉'
-        elif r < 10:
-            response = f'🎲 Rolled **{r}** - get fucked lmao!'
-        else:
-            response = f'🎲 Rolled **{r}** - not bad!'
-        await message.channel.send(response)
-    
-    # Sob emoji
-    if ":sob:" in message.content:
-        await message.channel.send("L")
-    
-    # Process commands
-    await bot.process_commands(message)
+        await msg.channel.send(f'🎲 Rolled: {r}')
+    if ":sob:" in msg.content:
+        await msg.channel.send("L")
+    await bot.process_commands(msg)
 
 # Get token from Railway environment variable
 TOKEN = os.environ.get("DISCORD_TOKEN")
 if not TOKEN:
     print("❌ ERROR: Set DISCORD_TOKEN environment variable!")
-    print("In Railway: Variables → Add DISCORD_TOKEN")
 else:
     bot.run(TOKEN)
