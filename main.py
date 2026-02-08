@@ -3,10 +3,10 @@ import random
 import discord
 from discord.ext import commands
 
-# Bot setup
+# Bot setup - Changed from '/' to '$'
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='/', intents=intents)
+bot = commands.Bot(command_prefix='$', intents=intents)  # CHANGED HERE
 
 # Cards
 CARDS = [
@@ -40,7 +40,7 @@ async def d(ctx):
 async def x(ctx, *nums):
     user = str(ctx.author.id)
     if user not in hands:
-        await ctx.send("Use /d first!")
+        await ctx.send("Use $d first!")  # CHANGED HERE
         return
     cards = hands[user].copy()
     for n in nums:
@@ -51,20 +51,20 @@ async def x(ctx, *nums):
     await ctx.send(show(cards))
 
 @bot.command()
-async def showcmd(ctx):
+async def show(ctx):  # Renamed from showcmd to show
     user = str(ctx.author.id)
     if user in hands:
         await ctx.send(show(hands[user]))
     else:
-        await ctx.send("Use /d first")
+        await ctx.send("Use $d first")  # CHANGED HERE
 
 @bot.command()
 async def helpme(ctx):
     text = """**Commands:**
-/d - Draw 4 cards
-/x 1 3 - Replace cards 1 and 3
-/show - See your cards
-/helpme - This message"""
+$d - Draw 4 cards
+$x 1 3 - Replace cards 1 and 3
+$show - See your cards
+$helpme - This message"""  # CHANGED ALL / TO $
     await ctx.send(text)
 
 @bot.event
