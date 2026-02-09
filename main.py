@@ -36,15 +36,9 @@ def draw_from_deck(deck):
             deck.append(random.choice(deck))
     return random.sample(deck, 4)
 
-def format_cards(cards, title="Cards"):
-    """Format cards into a numbered list"""
-    if not cards:
-        return f"**{title}:**\n*No cards*"
-    
-    text = f"**{title}:**\n"
-    for i, card in enumerate(cards, 1):
-        text += f"{i}. {card}\n"
-    return text
+@bot.event
+async def on_ready():
+    print(f'✅ Bot ready: {bot.user}')
 
 def get_player_deck(user_id):
     """Get or create a player's deck"""
@@ -52,10 +46,6 @@ def get_player_deck(user_id):
         # Start with a copy of the base deck
         player_decks[user_id] = BASE_DECK.copy()
     return player_decks[user_id]
-
-@bot.event
-async def on_ready():
-    print(f'✅ Bot ready: {bot.user}')
 
 # ===== DECK MANAGEMENT COMMANDS =====
 
@@ -66,10 +56,15 @@ async def cards(ctx):
     deck = get_player_deck(user_id)
     
     if not deck:
-        await ctx.send("Your deck is empty! Add cards with `$add [card name]`")
+        await ctx.send(f"{ctx.author.mention}, your deck is empty! Add cards with `$add [card name]`")
         return
     
-    await ctx.send(format_cards(deck, "Your Deck"))
+    # Show with player's name
+    response = f"**{ctx.author.display_name}'s Deck** ({len(deck)} cards):\n"
+    for i, card in enumerate(deck, 1):
+        response += f"{i}. {card}\n"
+    
+    await ctx.send(response)
 
 @bot.command()
 async def add(ctx, *, card_text: str):
@@ -81,13 +76,13 @@ async def add(ctx, *, card_text: str):
     card_text = card_text.strip()
     
     if not card_text:
-        await ctx.send("Please specify a card to add: `$add Fire - 3 Mp`")
+        await ctx.send(f"{ctx.author.mention}, please specify a card to add: `$add Fire - 3 Mp`")
         return
     
     # Add the card
     deck.append(card_text)
     
-    await ctx.send(f"✅ Added: `{card_text}`\nYour deck now has {len(deck)} cards.")
+    await ctx.send(f"✅ {ctx.author.mention} added: `{card_text}`\nYour deck now has {len(deck)} cards.")
 
 @bot.command()
 async def remove(ctx, card_number: int):
@@ -96,17 +91,24 @@ async def remove(ctx, card_number: int):
     deck = get_player_deck(user_id)
     
     if not deck:
-        await ctx.send("Your deck is empty!")
+        await ctx.send(f"{ctx.author.mention}, your deck is empty!")
         return
     
     if card_number < 1 or card_number > len(deck):
-        await ctx.send(f"Please use a number between 1 and {len(deck)}")
+        await ctx.send(f"{ctx.author.mention}, please use a number between 1 and {len(deck)}")
         return
     
     # Remove the card (1-based index for user, 0-based for list)
     removed_card = deck.pop(card_number - 1)
     
-    await ctx.send(f"✅ Removed: `{removed_card}`\nYour deck now has {len(deck)} cards.")
+    await ctx.send(f"✅ {ctx.author.mention} removed: `{removed_card}`\nYour deck now has {len(deck)} cards.")
+
+@bot.command()
+async def clear(ctx):
+    """Clear your custom deck (reset to base)"""
+    user_id = str(ctx.author.id)
+    player_decks[user_id] = BASE_DECK.copy()
+    await ctx.send(f"✅ {ctx.author.mention}'s deck cleared! Reset to base deck.")
 
 # ===== CARD GAME COMMANDS =====
 
@@ -117,15 +119,20 @@ async def d(ctx):
     deck = get_player_deck(user_id)
     
     if len(deck) < 4:
-        await ctx.send(f"❌ You need at least 4 cards in your deck! (You have {len(deck)})")
-        await ctx.send("Add more cards with `$add [card name]`")
+        await ctx.send(f"❌ {ctx.author.mention}, you need at least 4 cards in your deck! (You have {len(deck)})")
+        await ctx.send(f"Add more cards with `$add [card name]`")
         return
     
     # Draw 4 random cards from player's deck
     hand = draw_from_deck(deck)
     player_hands[user_id] = hand
     
-    await ctx.send(format_cards(hand, "Your Hand"))
+    # Show with player's name
+    response = f"**{ctx.author.display_name}'s Hand** (from their deck of {len(deck)} cards):\n"
+    for i, card in enumerate(hand, 1):
+        response += f"{i}. {card}\n"
+    
+    await ctx.send(response)
 
 @bot.command()
 async def x(ctx, *card_numbers):
@@ -133,11 +140,11 @@ async def x(ctx, *card_numbers):
     user_id = str(ctx.author.id)
     
     if user_id not in player_hands:
-        await ctx.send("Use `$d` first to draw a hand!")
+        await ctx.send(f"{ctx.author.mention}, use `$d` first to draw a hand!")
         return
     
     if not card_numbers:
-        await ctx.send("Specify which cards to replace: `$x 1 3`")
+        await ctx.send(f"{ctx.author.mention}, specify which cards to replace: `$x 1 3`")
         return
     
     deck = get_player_deck(user_id)
@@ -156,25 +163,27 @@ async def x(ctx, *card_numbers):
                     hand[idx] = random.choice(deck)
         
         player_hands[user_id] = hand
-        await ctx.send(format_cards(hand, "Your Hand"))
+        
+        # Show updated hand with player's name
+        response = f"**{ctx.author.display_name}'s Updated Hand:**\n"
+        for i, card in enumerate(hand, 1):
+            response += f"{i}. {card}\n"
+        await ctx.send(response)
     except ValueError:
-        await ctx.send("Use numbers 1-4: `$x 1 3`")
+        await ctx.send(f"{ctx.author.mention}, use numbers 1-4: `$x 1 3`")
 
 @bot.command()
 async def show(ctx):
     """Show your current hand"""
     user_id = str(ctx.author.id)
     if user_id in player_hands:
-        await ctx.send(format_cards(player_hands[user_id], "Your Hand"))
+        hand = player_hands[user_id]
+        response = f"**{ctx.author.display_name}'s Current Hand:**\n"
+        for i, card in enumerate(hand, 1):
+            response += f"{i}. {card}\n"
+        await ctx.send(response)
     else:
-        await ctx.send("No hand! Use `$d` first to draw cards.")
-
-@bot.command()
-async def clear(ctx):
-    """Clear your custom deck (reset to base)"""
-    user_id = str(ctx.author.id)
-    player_decks[user_id] = BASE_DECK.copy()
-    await ctx.send("✅ Deck cleared! Reset to base deck.")
+        await ctx.send(f"{ctx.author.mention}, no hand! Use `$d` first to draw cards.")
 
 # ===== HELP COMMAND =====
 
