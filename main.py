@@ -630,15 +630,15 @@ async def stats(ctx, *, text: Optional[str] = None):
 @bot.command()
 async def r(ctx):
     """Roll d20: $r"""
-    r = random.randint(1, 20)
-    if r == 1:
-        response = f'🎲 Rolled **{r}** - Critical fail!'
-    elif r == 20:
-        response = f'🎲 Rolled **{r}** - NATURAL 20! 🎉'
-    elif r < 10:
-        response = f'🎲 Rolled **{r}** - get fucked lmao!'
+    roll = random.randint(1, 20)
+    if roll == 1:
+        response = f'🎲 Rolled **{roll}** - Critical fail!'
+    elif roll == 20:
+        response = f'🎲 Rolled **{roll}** - NATURAL 20! 🎉'
+    elif roll < 10:
+        response = f'🎲 Rolled **{roll}** - get fucked lmao!'
     else:
-        response = f'🎲 Rolled **{r}** - not bad!'
+        response = f'🎲 Rolled **{roll}** - not bad!'
     await ctx.send(response)
 
 # ===== HELP =====
@@ -647,7 +647,7 @@ async def r(ctx):
 async def helpme(ctx):
     """Show all commands"""
     help_text = f"""
-**🎴 MYTHOS, SLAYER OF TREYS BOT - COMPLETE COMMANDS 🎴**
+**🎴 CARD GAME BOT - COMPLETE COMMANDS 🎴**
 
 **DECK MANAGEMENT:**
 `$cards` - Show your current deck
