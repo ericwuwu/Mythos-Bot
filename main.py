@@ -2,7 +2,6 @@ import os
 import random
 import discord
 from discord.ext import commands
-import json
 from typing import Optional
 
 # Bot setup
@@ -95,18 +94,6 @@ def is_admin(ctx):
     """Check if user is admin"""
     return ctx.author.guild_permissions.administrator
 
-def parse_mention_at_end(args):
-    """Parse arguments to check for mention at the end"""
-    if not args:
-        return None, []
-    
-    # Check if last arg is a mention
-    last_arg = args[-1]
-    if len(args) > 1 and last_arg.startswith('<@'):
-        # Has mention at the end
-        return last_arg, args[:-1]
-    return None, args
-
 @bot.event
 async def on_ready():
     print(f'✅ Bot ready: {bot.user}')
@@ -143,21 +130,36 @@ async def deck(ctx, deck_num: int, member: Optional[discord.Member] = None):
 @bot.command()
 async def name(ctx, *, text: str):
     """Set current deck name: $name My Arena Deck"""
-    mention, name_parts = parse_mention_at_end(text.split())
-    
-    if mention:
-        # Admin setting someone else's name
+    # Check for mention at the end
+    parts = text.strip().split()
+    if parts and parts[-1].startswith('<@') and parts[-1].endswith('>'):
+        mention = parts[-1]
+        deck_name = " ".join(parts[:-1])
+        
         if not is_admin(ctx):
             await ctx.send("❌ Only admins can set names for other players!")
             return
         
-        member = await commands.MemberConverter().convert(ctx, mention)
-        deck_name = " ".join(name_parts)
+        try:
+            member = await commands.MemberConverter().convert(ctx, mention)
+        except:
+            await ctx.send("Invalid user mention!")
+            return
+        
+        if not deck_name:
+            await ctx.send("Please provide a name!")
+            return
+        
         current = get_current_deck(member.id)
         current["name"] = deck_name
         await ctx.send(f"✅ Set {member.display_name}'s current deck name to: {deck_name}")
+    
     else:
         # Setting own name
+        if not text:
+            await ctx.send("Please provide a name!")
+            return
+        
         current = get_current_deck(ctx.author.id)
         current["name"] = text
         await ctx.send(f"✅ Set your current deck name to: {text}")
@@ -194,25 +196,95 @@ async def cards(ctx, member: Optional[discord.Member] = None):
 
 @bot.command()
 async def add(ctx, *, text: str):
-    """Add cards: $add Fire - 3 Mp or $add Fire - 3 Mp @player"""
-    mention, card_parts = parse_mention_at_end(text.split())
+    """Add cards: $add Fire - 3 Mp (one per line for multiple)"""
     
-    if mention:
-        # Admin adding to someone
-        if not is_admin(ctx):
-            await ctx.send("❌ Only admins can add cards to other players!")
+    # Check if this is a bulk add (contains line breaks)
+    if '\n' in text:
+        # Split by lines and clean up
+        lines = text.strip().split('\n')
+        cards_to_add = []
+        mention = None
+        
+        for line in lines:
+            line = line.strip()
+            if not line:  # Skip empty lines
+                continue
+            
+            # Check if this line is a mention
+            if line.startswith('<@') and line.endswith('>'):
+                mention = line
+            else:
+                cards_to_add.append(line)
+        
+        if not cards_to_add:
+            await ctx.send("No valid cards found to add!")
             return
         
-        member = await commands.MemberConverter().convert(ctx, mention)
-        card_text = " ".join(card_parts)
-        current = get_current_deck(member.id)
-        current["cards"].append(card_text)
-        await ctx.send(f"✅ Admin added to {member.display_name}'s deck: `{card_text}`\nDeck now has {len(current['cards'])} cards.")
-    else:
-        # Adding to self
+        # Handle mention (admin adding to someone)
+        if mention:
+            if not is_admin(ctx):
+                await ctx.send("❌ Only admins can add cards to other players!")
+                return
+            
+            try:
+                member = await commands.MemberConverter().convert(ctx, mention)
+            except:
+                await ctx.send("Invalid user mention!")
+                return
+            
+            current = get_current_deck(member.id)
+            added_count = 0
+            for card in cards_to_add:
+                current["cards"].append(card)
+                added_count += 1
+            
+            preview = ", ".join([f"`{c[:20]}...`" if len(c) > 20 else f"`{c}`" for c in cards_to_add[:3]])
+            if added_count > 3:
+                preview += f" and {added_count - 3} more"
+            
+            await ctx.send(f"✅ Admin added {added_count} card(s) to {member.display_name}'s deck\n{preview}\nDeck now has {len(current['cards'])} cards.")
+            return
+        
+        # Adding to self (multiple cards)
         current = get_current_deck(ctx.author.id)
-        current["cards"].append(text)
-        await ctx.send(f"✅ Added to your deck: `{text}`\nDeck now has {len(current['cards'])} cards.")
+        added_count = 0
+        for card in cards_to_add:
+            current["cards"].append(card)
+            added_count += 1
+        
+        preview = ", ".join([f"`{c[:20]}...`" if len(c) > 20 else f"`{c}`" for c in cards_to_add[:3]])
+        if added_count > 3:
+            preview += f" and {added_count - 3} more"
+        
+        await ctx.send(f"✅ Added {added_count} card(s) to your deck\n{preview}\nDeck now has {len(current['cards'])} cards.")
+    
+    else:
+        # Single card add (no line breaks)
+        # Check for mention at the end
+        parts = text.strip().split()
+        if parts and parts[-1].startswith('<@') and parts[-1].endswith('>'):
+            mention = parts[-1]
+            card_text = " ".join(parts[:-1])
+            
+            if not is_admin(ctx):
+                await ctx.send("❌ Only admins can add cards to other players!")
+                return
+            
+            try:
+                member = await commands.MemberConverter().convert(ctx, mention)
+            except:
+                await ctx.send("Invalid user mention!")
+                return
+            
+            current = get_current_deck(member.id)
+            current["cards"].append(card_text)
+            await ctx.send(f"✅ Admin added to {member.display_name}'s deck: `{card_text}`\nDeck now has {len(current['cards'])} cards.")
+        
+        else:
+            # Adding single card to self
+            current = get_current_deck(ctx.author.id)
+            current["cards"].append(text)
+            await ctx.send(f"✅ Added to your deck: `{text}`\nDeck now has {len(current['cards'])} cards.")
 
 @bot.command()
 async def remove(ctx, *args):
@@ -221,16 +293,23 @@ async def remove(ctx, *args):
         await ctx.send("Specify cards to remove: `$remove 1 3 5`")
         return
     
-    # Check for mention at end
-    mention, numbers = parse_mention_at_end(list(args))
-    
-    if mention:
+    # Check for mention at the end
+    args_list = list(args)
+    if args_list and args_list[-1].startswith('<@') and args_list[-1].endswith('>'):
+        mention = args_list[-1]
+        numbers = args_list[:-1]
+        
         # Admin removing from someone
         if not is_admin(ctx):
             await ctx.send("❌ Only admins can remove cards from other players!")
             return
         
-        member = await commands.MemberConverter().convert(ctx, mention)
+        try:
+            member = await commands.MemberConverter().convert(ctx, mention)
+        except:
+            await ctx.send("Invalid user mention!")
+            return
+        
         current = get_current_deck(member.id)
         
         if not current["cards"]:
@@ -258,9 +337,11 @@ async def remove(ctx, *args):
         
         removed_list = ", ".join([f"`{c}`" for c in reversed(removed)])
         await ctx.send(f"✅ Admin removed from {member.display_name}'s deck: {removed_list}\nDeck now has {len(current['cards'])} cards.")
+    
     else:
         # Removing from self
         current = get_current_deck(ctx.author.id)
+        numbers = args  # args are already the numbers
         
         if not current["cards"]:
             await ctx.send("Your deck is empty!")
@@ -268,7 +349,7 @@ async def remove(ctx, *args):
         
         # Convert to integers and validate
         indices = []
-        for num in args:
+        for num in numbers:
             try:
                 idx = int(num)
                 if 1 <= idx <= len(current["cards"]):
@@ -510,22 +591,36 @@ async def stats(ctx, *, text: Optional[str] = None):
             await ctx.send(f"No stats set for {ctx.author.display_name}'s {current['name']}. Use `$stats your text here` to set them.")
         return
     
-    # Check for mention at end for admin setting
-    mention, stat_parts = parse_mention_at_end(text.split())
-    
-    if mention:
-        # Admin setting stats for someone
+    # Check for mention at the end
+    parts = text.strip().split()
+    if parts and parts[-1].startswith('<@') and parts[-1].endswith('>'):
+        mention = parts[-1]
+        stat_text = " ".join(parts[:-1])
+        
         if not is_admin(ctx):
             await ctx.send("❌ Only admins can set stats for other players!")
             return
         
-        member = await commands.MemberConverter().convert(ctx, mention)
-        stat_text = " ".join(stat_parts)
+        try:
+            member = await commands.MemberConverter().convert(ctx, mention)
+        except:
+            await ctx.send("Invalid user mention!")
+            return
+        
+        if not stat_text:
+            await ctx.send("Please provide stats text!")
+            return
+        
         current = get_current_deck(member.id)
         current["stats"] = stat_text
         await ctx.send(f"✅ Set stats for {member.display_name}'s {current['name']}")
+    
     else:
         # Setting own stats
+        if not text:
+            await ctx.send("Please provide stats text!")
+            return
+        
         current = get_current_deck(ctx.author.id)
         current["stats"] = text
         await ctx.send(f"✅ Set stats for your {current['name']}")
@@ -546,31 +641,19 @@ async def r(ctx):
         response = f'🎲 Rolled **{r}** - not bad!'
     await ctx.send(response)
 
-# ===== SOB REACTION =====
-
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-    
-    if ":sob:" in message.content:
-        await message.channel.send("L")
-    
-    await bot.process_commands(message)
-
 # ===== HELP =====
 
 @bot.command()
 async def helpme(ctx):
     """Show all commands"""
     help_text = f"""
-**🎴 MYTHOS BOT, SLAYER OF TREYS - COMPLETE COMMANDS 🎴**
+**🎴 MYTHOS, SLAYER OF TREYS BOT - COMPLETE COMMANDS 🎴**
 
 **DECK MANAGEMENT:**
 `$cards` - Show your current deck
 `$cards @player` - Show another player's deck (admin)
-`$add [card]` - Add card to your deck
-`$add [card] @player` - Add card to player's deck (admin)
+`$add [card]` - Add card(s) to your deck (one per line)
+`$add [card] @player` - Add to player's deck (admin)
 `$remove 1 3 5` - Remove multiple cards
 `$remove 1 3 @player` - Remove from player's deck (admin)
 `$clear` - Clear your current deck
@@ -616,14 +699,5 @@ async def helpme(ctx):
 • 5 decks per player (Deck 1 has base cards, others empty)
 • Hand size: 6 | Max MP: 10
 • Base deck: {len(BASE_DECK)} cards
-"""
-    await ctx.send(help_text)
 
-# ===== RUN BOT =====
-
-TOKEN = os.environ.get("DISCORD_TOKEN")
-if not TOKEN:
-    print("❌ ERROR: Set DISCORD_TOKEN environment variable!")
-    print("In Railway: Variables → Add DISCORD_TOKEN")
-else:
-    bot.run(TOKEN)
+**BULK ADD EXAMPLE:**
