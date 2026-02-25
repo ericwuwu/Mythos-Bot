@@ -483,7 +483,7 @@ async def hand(ctx, member: Optional[discord.Member] = None):
 # ===== MP MANAGEMENT =====
 
 @bot.command()
-async def mp(ctx, operation: str, amount: Optional[str] = None, member: Optional[discord.Member] = None):
+async def mp(ctx, operation: str, member: Optional[discord.Member] = None):
     """Manage MP: $mp +2, $mp -3, $mp max, or $mp max @player"""
     target = member or ctx.author
     
@@ -701,3 +701,19 @@ async def helpme(ctx):
 • Base deck: {len(BASE_DECK)} cards
 
 **BULK ADD EXAMPLE:**
+$add
+Fire - 3 Mp
+Wind - 3 Mp
+Water - 3 Mp
+Earth - 3 Mp
+"""
+    await ctx.send(help_text)
+
+# ===== RUN BOT =====
+
+TOKEN = os.environ.get("DISCORD_TOKEN")
+if not TOKEN:
+    print("❌ ERROR: Set DISCORD_TOKEN environment variable!")
+    print("In Railway: Variables → Add DISCORD_TOKEN")
+else:
+    bot.run(TOKEN)
