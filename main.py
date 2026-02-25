@@ -2,13 +2,15 @@ import os
 import random
 import discord
 from discord.ext import commands
+import json
+from typing import Optional
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='$', intents=intents)
 
-# Base deck for each player
+# Base deck
 BASE_DECK = [
     "Fire - 3 Mp",
     "Wind - 3 Mp", 
@@ -24,56 +26,163 @@ BASE_DECK = [
     "Split - 2 Mp"
 ]
 
-# Store player decks and hands separately
-player_decks = {}  # Each player's custom deck
-player_hands = {}  # Each player's current hand (6 cards)
+# Player data structure
+player_data = {}
 
-def draw_from_deck(deck, count=6):
-    """Draw X random cards from a deck"""
-    if len(deck) < count:
-        # If deck has less than X cards, add duplicates
-        while len(deck) < count:
-            deck.append(random.choice(deck))
-    return random.sample(deck, count)
+def get_player(user_id):
+    """Get or create player data"""
+    user_id = str(user_id)
+    if user_id not in player_data:
+        player_data[user_id] = {
+            "current_deck": 1,
+            "decks": {
+                1: {
+                    "name": "Deck 1",
+                    "cards": BASE_DECK.copy(),
+                    "hand_size": 6,
+                    "max_mp": 10,
+                    "current_mp": 10,
+                    "stats": "",
+                    "hand": []
+                },
+                2: {
+                    "name": "Deck 2",
+                    "cards": [],
+                    "hand_size": 6,
+                    "max_mp": 10,
+                    "current_mp": 10,
+                    "stats": "",
+                    "hand": []
+                },
+                3: {
+                    "name": "Deck 3",
+                    "cards": [],
+                    "hand_size": 6,
+                    "max_mp": 10,
+                    "current_mp": 10,
+                    "stats": "",
+                    "hand": []
+                },
+                4: {
+                    "name": "Deck 4",
+                    "cards": [],
+                    "hand_size": 6,
+                    "max_mp": 10,
+                    "current_mp": 10,
+                    "stats": "",
+                    "hand": []
+                },
+                5: {
+                    "name": "Deck 5",
+                    "cards": [],
+                    "hand_size": 6,
+                    "max_mp": 10,
+                    "current_mp": 10,
+                    "stats": "",
+                    "hand": []
+                }
+            }
+        }
+    return player_data[user_id]
+
+def get_current_deck(user_id):
+    """Get current deck for a user"""
+    player = get_player(user_id)
+    deck_num = player["current_deck"]
+    return player["decks"][deck_num]
+
+def is_admin(ctx):
+    """Check if user is admin"""
+    return ctx.author.guild_permissions.administrator
+
+def parse_mention_at_end(args):
+    """Parse arguments to check for mention at the end"""
+    if not args:
+        return None, []
+    
+    # Check if last arg is a mention
+    last_arg = args[-1]
+    if len(args) > 1 and last_arg.startswith('<@'):
+        # Has mention at the end
+        return last_arg, args[:-1]
+    return None, args
 
 @bot.event
 async def on_ready():
     print(f'✅ Bot ready: {bot.user}')
 
-def get_player_deck(user_id):
-    """Get or create a player's deck"""
-    user_id = str(user_id)
-    if user_id not in player_decks:
-        # Start with a copy of the base deck
-        player_decks[user_id] = BASE_DECK.copy()
-    return player_decks[user_id]
-
-# ===== DECK MANAGEMENT COMMANDS =====
+# ===== DECK MANAGEMENT =====
 
 @bot.command()
-async def cards(ctx, member: discord.Member = None):
-    """Show your custom deck or another player's deck: $cards @user"""
-    if member is None:
-        member = ctx.author
+async def deck(ctx, deck_num: int, member: Optional[discord.Member] = None):
+    """Switch decks: $deck 2 or $deck 3 @player"""
+    target = member or ctx.author
     
-    user_id = str(member.id)
-    deck = get_player_deck(user_id)
-    
-    if not deck:
-        await ctx.send(f"{member.display_name}'s deck is empty!")
+    if member and not is_admin(ctx):
+        await ctx.send("❌ Only admins can switch other players' decks!")
         return
     
-    # Show with player's name
-    response = f"**{member.display_name}'s Deck** ({len(deck)} cards):\n"
-    for i, card in enumerate(deck, 1):
+    if deck_num < 1 or deck_num > 5:
+        await ctx.send("❌ Deck number must be between 1 and 5!")
+        return
+    
+    player = get_player(target.id)
+    old_deck = player["current_deck"]
+    player["current_deck"] = deck_num
+    
+    # Reset hand and MP when switching decks
+    current = get_current_deck(target.id)
+    current["hand"] = []
+    current["current_mp"] = current["max_mp"]
+    
+    if target.id == ctx.author.id:
+        await ctx.send(f"✅ Switched from Deck {old_deck} to Deck {deck_num} ({current['name']})")
+    else:
+        await ctx.send(f"✅ Admin switched {target.display_name} from Deck {old_deck} to Deck {deck_num} ({current['name']})")
+
+@bot.command()
+async def name(ctx, *, text: str):
+    """Set current deck name: $name My Arena Deck"""
+    mention, name_parts = parse_mention_at_end(text.split())
+    
+    if mention:
+        # Admin setting someone else's name
+        if not is_admin(ctx):
+            await ctx.send("❌ Only admins can set names for other players!")
+            return
+        
+        member = await commands.MemberConverter().convert(ctx, mention)
+        deck_name = " ".join(name_parts)
+        current = get_current_deck(member.id)
+        current["name"] = deck_name
+        await ctx.send(f"✅ Set {member.display_name}'s current deck name to: {deck_name}")
+    else:
+        # Setting own name
+        current = get_current_deck(ctx.author.id)
+        current["name"] = text
+        await ctx.send(f"✅ Set your current deck name to: {text}")
+
+# ===== CARD MANAGEMENT =====
+
+@bot.command()
+async def cards(ctx, member: Optional[discord.Member] = None):
+    """Show deck cards: $cards or $cards @player"""
+    target = member or ctx.author
+    current = get_current_deck(target.id)
+    
+    if not current["cards"]:
+        await ctx.send(f"{target.display_name}'s current deck is empty!")
+        return
+    
+    response = f"**{target.display_name}'s {current['name']}** ({len(current['cards'])} cards):\n"
+    for i, card in enumerate(current["cards"], 1):
         response += f"{i}. {card}\n"
     
-    # Split long messages if needed
+    # Handle long messages
     if len(response) > 2000:
-        # Send first part
-        await ctx.send(f"**{member.display_name}'s Deck** ({len(deck)} cards) - Part 1:")
+        await ctx.send(f"**{target.display_name}'s {current['name']}** (Part 1):")
         part = ""
-        for i, card in enumerate(deck, 1):
+        for i, card in enumerate(current["cards"], 1):
             if len(part) + len(f"{i}. {card}\n") > 1900:
                 await ctx.send(part)
                 part = ""
@@ -84,249 +193,435 @@ async def cards(ctx, member: discord.Member = None):
         await ctx.send(response)
 
 @bot.command()
-async def add(ctx, member: discord.Member, *, card_text: str):
-    """Add a card to a player's deck: $add @user Fire - 3 Mp"""
-    if not ctx.author.guild_permissions.administrator:
-        await ctx.send("❌ Only administrators can add cards to other players!")
-        return
+async def add(ctx, *, text: str):
+    """Add cards: $add Fire - 3 Mp or $add Fire - 3 Mp @player"""
+    mention, card_parts = parse_mention_at_end(text.split())
     
-    user_id = str(member.id)
-    deck = get_player_deck(user_id)
-    
-    # Clean up the input
-    card_text = card_text.strip()
-    
-    if not card_text:
-        await ctx.send(f"Please specify a card to add: `$add @user Fire - 3 Mp`")
-        return
-    
-    # Add the card
-    deck.append(card_text)
-    
-    await ctx.send(f"✅ Administrator added to {member.display_name}'s deck: `{card_text}`\nTheir deck now has {len(deck)} cards.")
+    if mention:
+        # Admin adding to someone
+        if not is_admin(ctx):
+            await ctx.send("❌ Only admins can add cards to other players!")
+            return
+        
+        member = await commands.MemberConverter().convert(ctx, mention)
+        card_text = " ".join(card_parts)
+        current = get_current_deck(member.id)
+        current["cards"].append(card_text)
+        await ctx.send(f"✅ Admin added to {member.display_name}'s deck: `{card_text}`\nDeck now has {len(current['cards'])} cards.")
+    else:
+        # Adding to self
+        current = get_current_deck(ctx.author.id)
+        current["cards"].append(text)
+        await ctx.send(f"✅ Added to your deck: `{text}`\nDeck now has {len(current['cards'])} cards.")
 
 @bot.command()
-async def remove(ctx, member: discord.Member = None, card_number: int = None):
-    """Remove a card from your deck or another player's deck (admin only): $remove @user 3"""
-    if member is None:
-        # Remove from self
-        member = ctx.author
-        target_id = str(ctx.author.id)
-        deck = get_player_deck(target_id)
-        
-        if card_number is None:
-            await ctx.send(f"Please specify a card number: `$remove 3`")
-            return
-    else:
-        # Admin removing from another player
-        if not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ Only administrators can remove cards from other players!")
-            return
-        
-        if card_number is None:
-            await ctx.send(f"Please specify a card number: `$remove @user 3`")
-            return
-        
-        target_id = str(member.id)
-        deck = get_player_deck(target_id)
-    
-    if not deck:
-        await ctx.send(f"{member.display_name}'s deck is empty!")
+async def remove(ctx, *args):
+    """Remove cards: $remove 1 3 5 or $remove 1 3 @player"""
+    if not args:
+        await ctx.send("Specify cards to remove: `$remove 1 3 5`")
         return
     
-    if card_number < 1 or card_number > len(deck):
-        await ctx.send(f"Please use a number between 1 and {len(deck)}")
-        return
+    # Check for mention at end
+    mention, numbers = parse_mention_at_end(list(args))
     
-    # Remove the card (1-based index for user, 0-based for list)
-    removed_card = deck.pop(card_number - 1)
-    
-    if member.id == ctx.author.id:
-        await ctx.send(f"✅ Removed from your deck: `{removed_card}`\nYour deck now has {len(deck)} cards.")
+    if mention:
+        # Admin removing from someone
+        if not is_admin(ctx):
+            await ctx.send("❌ Only admins can remove cards from other players!")
+            return
+        
+        member = await commands.MemberConverter().convert(ctx, mention)
+        current = get_current_deck(member.id)
+        
+        if not current["cards"]:
+            await ctx.send(f"{member.display_name}'s deck is empty!")
+            return
+        
+        # Convert to integers and validate
+        indices = []
+        for num in numbers:
+            try:
+                idx = int(num)
+                if 1 <= idx <= len(current["cards"]):
+                    indices.append(idx)
+                else:
+                    await ctx.send(f"Invalid number: {num} (must be 1-{len(current['cards'])})")
+                    return
+            except ValueError:
+                await ctx.send(f"Invalid number: {num}")
+                return
+        
+        # Remove in reverse order
+        removed = []
+        for idx in sorted(indices, reverse=True):
+            removed.append(current["cards"].pop(idx - 1))
+        
+        removed_list = ", ".join([f"`{c}`" for c in reversed(removed)])
+        await ctx.send(f"✅ Admin removed from {member.display_name}'s deck: {removed_list}\nDeck now has {len(current['cards'])} cards.")
     else:
-        await ctx.send(f"✅ Administrator removed from {member.display_name}'s deck: `{removed_card}`\nTheir deck now has {len(deck)} cards.")
+        # Removing from self
+        current = get_current_deck(ctx.author.id)
+        
+        if not current["cards"]:
+            await ctx.send("Your deck is empty!")
+            return
+        
+        # Convert to integers and validate
+        indices = []
+        for num in args:
+            try:
+                idx = int(num)
+                if 1 <= idx <= len(current["cards"]):
+                    indices.append(idx)
+                else:
+                    await ctx.send(f"Invalid number: {num} (must be 1-{len(current['cards'])})")
+                    return
+            except ValueError:
+                await ctx.send(f"Invalid number: {num}")
+                return
+        
+        # Remove in reverse order
+        removed = []
+        for idx in sorted(indices, reverse=True):
+            removed.append(current["cards"].pop(idx - 1))
+        
+        removed_list = ", ".join([f"`{c}`" for c in reversed(removed)])
+        await ctx.send(f"✅ Removed: {removed_list}\nDeck now has {len(current['cards'])} cards.")
 
 @bot.command()
-async def clear(ctx, member: discord.Member = None):
-    """Clear your custom deck or another player's deck (admin only): $clear @user"""
-    if member is None:
-        # Clear self
-        user_id = str(ctx.author.id)
-        player_decks[user_id] = BASE_DECK.copy()
-        await ctx.send(f"✅ Your deck cleared! Reset to base deck.")
-    else:
-        # Admin clearing another player
-        if not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ Only administrators can clear other players' decks!")
-            return
-        
-        user_id = str(member.id)
-        player_decks[user_id] = BASE_DECK.copy()
-        await ctx.send(f"✅ Administrator cleared {member.display_name}'s deck! Reset to base deck.")
-
-# ===== CARD GAME COMMANDS =====
-
-@bot.command()
-async def d(ctx):
-    """Draw 6 cards from your deck"""
-    user_id = str(ctx.author.id)
-    deck = get_player_deck(user_id)
+async def clear(ctx, member: Optional[discord.Member] = None):
+    """Clear current deck: $clear or $clear @player"""
+    target = member or ctx.author
     
-    if len(deck) < 6:
-        await ctx.send(f"❌ {ctx.author.mention}, you need at least 6 cards in your deck! (You have {len(deck)})")
-        await ctx.send(f"Add more cards with `$add [card name]`")
+    if member and not is_admin(ctx):
+        await ctx.send("❌ Only admins can clear other players' decks!")
         return
     
-    # Draw 6 random cards from player's deck
-    hand = draw_from_deck(deck, 6)
-    player_hands[user_id] = hand
+    current = get_current_deck(target.id)
+    current["cards"] = []
     
-    # Show with player's name
-    response = f"**{ctx.author.display_name}'s Hand** (from their deck of {len(deck)} cards):\n"
-    for i, card in enumerate(hand, 1):
+    if target.id == ctx.author.id:
+        await ctx.send(f"✅ Cleared your current deck ({current['name']})")
+    else:
+        await ctx.send(f"✅ Admin cleared {target.display_name}'s current deck ({current['name']})")
+
+@bot.command()
+async def default(ctx, member: Optional[discord.Member] = None):
+    """Reset to base deck: $default or $default @player"""
+    target = member or ctx.author
+    
+    if member and not is_admin(ctx):
+        await ctx.send("❌ Only admins can reset other players' decks!")
+        return
+    
+    current = get_current_deck(target.id)
+    current["cards"] = BASE_DECK.copy()
+    
+    if target.id == ctx.author.id:
+        await ctx.send(f"✅ Reset your current deck ({current['name']}) to base deck ({len(BASE_DECK)} cards)")
+    else:
+        await ctx.send(f"✅ Admin reset {target.display_name}'s current deck ({current['name']}) to base deck")
+
+# ===== GAME PLAY =====
+
+@bot.command()
+async def draw(ctx):
+    """Draw a hand: $draw"""
+    current = get_current_deck(ctx.author.id)
+    
+    if len(current["cards"]) < current["hand_size"]:
+        await ctx.send(f"❌ You need at least {current['hand_size']} cards in your deck! (You have {len(current['cards'])})")
+        return
+    
+    # Draw hand
+    current["hand"] = random.sample(current["cards"], current["hand_size"])
+    
+    # Show hand with MP
+    response = f"**{ctx.author.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']}\n"
+    for i, card in enumerate(current["hand"], 1):
         response += f"{i}. {card}\n"
     
     await ctx.send(response)
 
 @bot.command()
-async def hand(ctx, member: discord.Member = None):
-    """Show your current hand or another player's hand: $hand @user"""
-    if member is None:
-        member = ctx.author
-    
-    user_id = str(member.id)
-    if user_id in player_hands:
-        hand = player_hands[user_id]
-        deck = get_player_deck(user_id)
-        response = f"**{member.display_name}'s Current Hand** (from their deck of {len(deck)} cards):\n"
-        for i, card in enumerate(hand, 1):
-            response += f"{i}. {card}\n"
-        await ctx.send(response)
-    else:
-        await ctx.send(f"{member.display_name} hasn't drawn a hand yet! Use `$d` first to draw cards.")
-
-# Alias for hand command
-@bot.command()
-async def deck(ctx, member: discord.Member = None):
-    """Alias for $hand - Show current hand: $deck @user"""
-    await hand(ctx, member)
-
-@bot.command()
 async def x(ctx, *card_numbers):
-    """Replace cards in your hand: $x 1 3 5"""
-    user_id = str(ctx.author.id)
+    """Replace cards: $x 1 3 5"""
+    current = get_current_deck(ctx.author.id)
     
-    if user_id not in player_hands:
-        await ctx.send(f"{ctx.author.mention}, use `$d` first to draw a hand!")
+    if not current["hand"]:
+        await ctx.send("Draw a hand first with `$draw`!")
         return
     
     if not card_numbers:
-        await ctx.send(f"{ctx.author.mention}, specify which cards to replace: `$x 1 3 5`")
+        await ctx.send("Specify cards to replace: `$x 1 3 5`")
         return
     
-    deck = get_player_deck(user_id)
-    hand = player_hands[user_id].copy()
-    replaced_indices = []
+    hand = current["hand"].copy()
+    replaced = []
     
     try:
         for num in card_numbers:
             idx = int(num) - 1
-            if 0 <= idx < 6:
-                # Replace with random card from player's deck
-                available_cards = [card for card in deck if card not in hand]
-                if available_cards:
-                    hand[idx] = random.choice(available_cards)
+            if 0 <= idx < current["hand_size"]:
+                # Replace with random card from deck (not in hand if possible)
+                available = [c for c in current["cards"] if c not in hand]
+                if available:
+                    hand[idx] = random.choice(available)
                 else:
-                    # If all cards are in hand, draw any from deck
-                    hand[idx] = random.choice(deck)
-                replaced_indices.append(int(num))
+                    hand[idx] = random.choice(current["cards"])
+                replaced.append(int(num))
         
-        player_hands[user_id] = hand
+        current["hand"] = hand
         
-        # Show updated hand with player's name
-        replaced_list = ", ".join(map(str, sorted(replaced_indices)))
-        response = f"**{ctx.author.display_name}'s Updated Hand** (replaced cards {replaced_list}):\n"
+        # Show updated hand with MP
+        replaced_list = ", ".join(map(str, sorted(replaced)))
+        response = f"**{ctx.author.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']} (replaced {replaced_list})\n"
         for i, card in enumerate(hand, 1):
             response += f"{i}. {card}\n"
+        
         await ctx.send(response)
     except ValueError:
-        await ctx.send(f"{ctx.author.mention}, use numbers 1-6: `$x 1 3 5`")
-
-# ===== HELP COMMAND =====
+        await ctx.send(f"Use numbers 1-{current['hand_size']}: `$x 1 3 5`")
 
 @bot.command()
-async def helpme(ctx):
-    """Show all commands"""
-    help_text = f"""
-**🎴 CARD GAME BOT 🎴**
+async def hand(ctx, member: Optional[discord.Member] = None):
+    """Show current hand: $hand or $hand @player"""
+    target = member or ctx.author
+    current = get_current_deck(target.id)
+    
+    if not current["hand"]:
+        await ctx.send(f"{target.display_name} hasn't drawn a hand yet!")
+        return
+    
+    response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']}\n"
+    for i, card in enumerate(current["hand"], 1):
+        response += f"{i}. {card}\n"
+    
+    await ctx.send(response)
 
-**DECK MANAGEMENT:**
-`{ctx.prefix}cards` - Show your custom deck
-`{ctx.prefix}cards @user` - Show another player's deck
-`{ctx.prefix}add [card]` - Add a card to your deck
-`{ctx.prefix}remove [number]` - Remove a card from your deck
-`{ctx.prefix}clear` - Reset your deck to base
+# ===== MP MANAGEMENT =====
 
-**ADMIN COMMANDS:**
-`{ctx.prefix}add @user [card]` - Add card to player's deck
-`{ctx.prefix}remove @user [number]` - Remove card from player's deck
-`{ctx.prefix}clear @user` - Reset player's deck to base
+@bot.command()
+async def mp(ctx, operation: str, amount: Optional[str] = None, member: Optional[discord.Member] = None):
+    """Manage MP: $mp +2, $mp -3, $mp max, or $mp max @player"""
+    target = member or ctx.author
+    
+    if member and not is_admin(ctx):
+        await ctx.send("❌ Only admins can modify other players' MP!")
+        return
+    
+    current = get_current_deck(target.id)
+    
+    # Handle max reset
+    if operation.lower() == "max":
+        current["current_mp"] = current["max_mp"]
+        action = "reset to max"
+    elif operation.startswith("+") or operation.startswith("-"):
+        try:
+            change = int(operation)
+            new_mp = current["current_mp"] + change
+            # Clamp between 0 and max
+            current["current_mp"] = max(0, min(new_mp, current["max_mp"]))
+            action = f"{operation} MP"
+        except ValueError:
+            await ctx.send("Use: `$mp +2`, `$mp -3`, or `$mp max`")
+            return
+    else:
+        await ctx.send("Use: `$mp +2`, `$mp -3`, or `$mp max`")
+        return
+    
+    # Show hand with updated MP
+    if current["hand"]:
+        response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']} ({action})\n"
+        for i, card in enumerate(current["hand"], 1):
+            response += f"{i}. {card}\n"
+    else:
+        response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']} ({action})\nNo hand drawn yet."
+    
+    await ctx.send(response)
 
-**GAME PLAY:**
-`{ctx.prefix}d` - Draw 6 cards from your deck
-`{ctx.prefix}x 1 3 5` - Replace cards in your hand
-`{ctx.prefix}hand` - Show your current hand
-`{ctx.prefix}hand @user` - Show another player's hand
-`{ctx.prefix}deck` - Alias for hand
+# ===== SETTINGS =====
 
-**OTHER FEATURES:**
-`roll d20` - Roll a dice
-`:sob:` - Get 'L' response
+@bot.command()
+async def settings(ctx, setting: Optional[str] = None, value: Optional[str] = None, member: Optional[discord.Member] = None):
+    """View or change settings: $settings, $settings hand 8, $settings mp 15 @player"""
+    
+    # Just view settings
+    if setting is None:
+        current = get_current_deck(ctx.author.id)
+        response = f"**{ctx.author.display_name}'s {current['name']} Settings:**\n"
+        response += f"• Hand Size: {current['hand_size']}\n"
+        response += f"• Max MP: {current['max_mp']}\n"
+        response += f"• Current MP: {current['current_mp']}/{current['max_mp']}\n"
+        response += f"• Cards in Deck: {len(current['cards'])}\n"
+        if current["stats"]:
+            response += f"• Stats: {current['stats']}"
+        await ctx.send(response)
+        return
+    
+    # Changing settings
+    target = member or ctx.author
+    
+    if member and not is_admin(ctx):
+        await ctx.send("❌ Only admins can change settings for other players!")
+        return
+    
+    if value is None:
+        await ctx.send(f"Specify a value: `$settings {setting} 8`")
+        return
+    
+    current = get_current_deck(target.id)
+    
+    try:
+        if setting.lower() == "hand":
+            new_value = int(value)
+            if new_value < 1 or new_value > 20:
+                await ctx.send("Hand size must be between 1 and 20!")
+                return
+            current["hand_size"] = new_value
+            await ctx.send(f"✅ Set {target.display_name}'s hand size to {new_value}")
+            
+        elif setting.lower() == "mp":
+            new_value = int(value)
+            if new_value < 1 or new_value > 100:
+                await ctx.send("Max MP must be between 1 and 100!")
+                return
+            current["max_mp"] = new_value
+            current["current_mp"] = new_value  # Reset to new max
+            await ctx.send(f"✅ Set {target.display_name}'s max MP to {new_value}")
+            
+        else:
+            await ctx.send("Invalid setting! Use `hand` or `mp`")
+            
+    except ValueError:
+        await ctx.send("Value must be a number!")
 
-**BASE DECK:** {len(BASE_DECK)} cards
-- Elements: Fire, Wind, Water, Earth (3 Mp each)
-- Spells: Ball, Bolt (2 Mp), Wall, Burst (3 Mp)
-- Moves: Forward, Down (1 Mp), Orbit, Split (2 Mp)
+# ===== STATS =====
 
-**EXAMPLES:**
-1. `{ctx.prefix}add Reverse - cost of what it's reversing`
-2. `{ctx.prefix}d` - Draw 6 cards
-3. `{ctx.prefix}x 1 4` - Replace cards 1 and 4
-4. `{ctx.prefix}hand @John` - See John's hand
-5. `{ctx.prefix}cards @Sarah` - See Sarah's deck
-"""
-    await ctx.send(help_text)
+@bot.command()
+async def stats(ctx, *, text: Optional[str] = None):
+    """View or set stats: $stats or $stats My arena stats"""
+    if text is None:
+        # View stats
+        current = get_current_deck(ctx.author.id)
+        if current["stats"]:
+            await ctx.send(f"**{ctx.author.display_name}'s {current['name']} Stats:**\n{current['stats']}")
+        else:
+            await ctx.send(f"No stats set for {ctx.author.display_name}'s {current['name']}. Use `$stats your text here` to set them.")
+        return
+    
+    # Check for mention at end for admin setting
+    mention, stat_parts = parse_mention_at_end(text.split())
+    
+    if mention:
+        # Admin setting stats for someone
+        if not is_admin(ctx):
+            await ctx.send("❌ Only admins can set stats for other players!")
+            return
+        
+        member = await commands.MemberConverter().convert(ctx, mention)
+        stat_text = " ".join(stat_parts)
+        current = get_current_deck(member.id)
+        current["stats"] = stat_text
+        await ctx.send(f"✅ Set stats for {member.display_name}'s {current['name']}")
+    else:
+        # Setting own stats
+        current = get_current_deck(ctx.author.id)
+        current["stats"] = text
+        await ctx.send(f"✅ Set stats for your {current['name']}")
 
-# ===== OTHER FEATURES =====
+# ===== ROLL =====
+
+@bot.command()
+async def r(ctx):
+    """Roll d20: $r"""
+    r = random.randint(1, 20)
+    if r == 1:
+        response = f'🎲 Rolled **{r}** - Critical fail!'
+    elif r == 20:
+        response = f'🎲 Rolled **{r}** - NATURAL 20! 🎉'
+    elif r < 10:
+        response = f'🎲 Rolled **{r}** - get fucked lmao!'
+    else:
+        response = f'🎲 Rolled **{r}** - not bad!'
+    await ctx.send(response)
+
+# ===== SOB REACTION =====
 
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
     
-    # Dice roll
-    if message.content.lower().startswith('roll d20'):
-        r = random.randint(1, 20)
-        if r == 1:
-            response = f'🎲 Rolled **{r}** - Critical fail!'
-        elif r == 20:
-            response = f'🎲 Rolled **{r}** - NATURAL 20! 🎉'
-        elif r < 10:
-            response = f'🎲 Rolled **{r}** - get fucked lmao!'
-        else:
-            response = f'🎲 Rolled **{r}** - not bad!'
-        await message.channel.send(response)
-    
-    # Sob emoji
     if ":sob:" in message.content:
         await message.channel.send("L")
     
-    # Process commands
     await bot.process_commands(message)
+
+# ===== HELP =====
+
+@bot.command()
+async def helpme(ctx):
+    """Show all commands"""
+    help_text = f"""
+**🎴 MYTHOS BOT, SLAYER OF TREYS - COMPLETE COMMANDS 🎴**
+
+**DECK MANAGEMENT:**
+`$cards` - Show your current deck
+`$cards @player` - Show another player's deck (admin)
+`$add [card]` - Add card to your deck
+`$add [card] @player` - Add card to player's deck (admin)
+`$remove 1 3 5` - Remove multiple cards
+`$remove 1 3 @player` - Remove from player's deck (admin)
+`$clear` - Clear your current deck
+`$clear @player` - Clear player's deck (admin)
+`$default` - Reset to base 12 cards
+`$default @player` - Reset player's deck (admin)
+
+**DECK SWITCHING:**
+`$deck 2` - Switch to deck 2
+`$deck 3 @player` - Switch player's deck (admin)
+`$name My Deck` - Name your current deck
+`$name Arena @player` - Name player's deck (admin)
+
+**GAME PLAY:**
+`$draw` - Draw a hand
+`$hand` - Show your current hand
+`$hand @player` - Show player's hand
+`$x 1 3 5` - Replace cards in hand
+
+**MP SYSTEM:**
+`$mp +2` - Add MP
+`$mp -3` - Subtract MP
+`$mp max` - Reset to max MP
+`$mp max @player` - Reset player's MP (admin)
+
+**SETTINGS:**
+`$settings` - View current settings
+`$settings hand 8` - Set hand size
+`$settings hand 8 @player` - Set player's hand size (admin)
+`$settings mp 15` - Set max MP
+`$settings mp 15 @player` - Set player's max MP (admin)
+
+**STATS:**
+`$stats` - View stats
+`$stats My arena stats` - Set your stats
+`$stats New stats @player` - Set player's stats (admin)
+
+**OTHER:**
+`$r` - Roll d20
+`$helpme` - This message
+
+**DEFAULTS:**
+• 5 decks per player (Deck 1 has base cards, others empty)
+• Hand size: 6 | Max MP: 10
+• Base deck: {len(BASE_DECK)} cards
+"""
+    await ctx.send(help_text)
 
 # ===== RUN BOT =====
 
-TOKEN = os.environ.get("DISCCOUNT_TOKEN") or os.environ.get("DISCORD_TOKEN")
+TOKEN = os.environ.get("DISCORD_TOKEN")
 if not TOKEN:
     print("❌ ERROR: Set DISCORD_TOKEN environment variable!")
     print("In Railway: Variables → Add DISCORD_TOKEN")
