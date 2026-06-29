@@ -151,6 +151,10 @@ def format_active_deck(deck):
         result += f"{card_num}. {format_card(card_num)}\n"
     return result
 
+def format_mp(user_data):
+    """Format MP as current/max"""
+    return f"{user_data['mp']}/{user_data['mp_cap']} Mp"
+
 def ensure_category_balance(hand, deck_categories):
     """Ensure hand has at least one of each category present in the deck"""
     # Get categories that exist in the deck
@@ -578,8 +582,6 @@ Info: {card['info']}
                 await message.channel.send("You have no cards in your active deck! Use `$use # # #` to add cards first.")
             return
         
-        mp_message = f"Current MP: {target_user['mp']} Mp"
-        
         # Get the deck categories (cards available in active deck)
         deck_categories = target_user["active_deck"].copy()
         
@@ -610,10 +612,11 @@ Info: {card['info']}
         save_data()
         
         hand_display = format_hand(drawn_cards)
+        mp_display = format_mp(target_user)
         if target_user_id != user_id:
-            await message.channel.send(f"<@{target_user_id}> - {mp_message}\n**Drawn Cards:**\n```\n{hand_display}```")
+            await message.channel.send(f"<@{target_user_id}> - MP: {mp_display}\n**Drawn Cards:**\n```\n{hand_display}```")
         else:
-            await message.channel.send(f"{mp_message}\n**Your Drawn Cards:**\n```\n{hand_display}```")
+            await message.channel.send(f"MP: {mp_display}\n**Your Drawn Cards:**\n```\n{hand_display}```")
         return
 
     # HAND COMMAND
@@ -626,10 +629,11 @@ Info: {card['info']}
             return
         
         hand_display = format_hand(target_user["hand"])
+        mp_display = format_mp(target_user)
         if target_user_id != user_id:
-            await message.channel.send(f"**<@{target_user_id}>'s Current Hand:**\n```\n{hand_display}```")
+            await message.channel.send(f"**<@{target_user_id}>'s Current Hand:**\nMP: {mp_display}\n```\n{hand_display}```")
         else:
-            await message.channel.send(f"**Your Current Hand:**\n```\n{hand_display}```")
+            await message.channel.send(f"**Your Current Hand:**\nMP: {mp_display}\n```\n{hand_display}```")
         return
 
     # DEFAULT COMMAND - Reset to default deck
@@ -641,7 +645,7 @@ Info: {card['info']}
                 return
             target_user.update(DEFAULT_GIVEN_DECK.copy())
             save_data()
-            await message.channel.send(f"Reset <@{target_user_id}>'s deck to default!")
+            await message.channel.send(f"Reset <@{target_user_id}>'s deck to default!\nCards: Fire, Wind, Water, Earth, Ball, Bolt, Wall, Burst, Forward, Down, Spin, Split (5 copies each)")
         else:
             user.update(DEFAULT_GIVEN_DECK.copy())
             save_data()
@@ -701,9 +705,10 @@ Info: {card['info']}
                     total_mp_cost += 2
         
         if target_user["mp"] < total_mp_cost and target_user["mp_cap"] > 0:
-            await message.channel.send(f"You don't have enough MP! You have {target_user['mp']} Mp, need {total_mp_cost} Mp.")
+            await message.channel.send(f"You don't have enough MP! You have {format_mp(target_user)}, need {total_mp_cost} Mp.")
             return
         
+        old_mp = target_user["mp"]
         target_user["mp"] -= total_mp_cost
         
         # Get available cards from inventory for rerolling
@@ -739,10 +744,11 @@ Info: {card['info']}
         save_data()
         
         hand_display = format_hand(target_user["hand"])
+        mp_display = format_mp(target_user)
         if target_user_id != user_id:
-            await message.channel.send(f"**Rerolled Cards for <@{target_user_id}>!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
+            await message.channel.send(f"**Rerolled Cards for <@{target_user_id}>!** (Cost: {total_mp_cost} Mp)\nMP: {mp_display} ({old_mp} → {target_user['mp']})\n```\n{hand_display}```")
         else:
-            await message.channel.send(f"**Rerolled Cards!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
+            await message.channel.send(f"**Rerolled Cards!** (Cost: {total_mp_cost} Mp)\nMP: {mp_display} ({old_mp} → {target_user['mp']})\n```\n{hand_display}```")
         return
 
     # R COMMAND - Simple d20 roll
@@ -762,16 +768,18 @@ Info: {card['info']}
     # MP TURN COMMAND
     if content.startswith('$mp turn'):
         recovery = target_user["mp_recovery"]
+        old_mp = target_user["mp"]
         target_user["mp"] += recovery
         
         if target_user["mp_cap"] > 0 and target_user["mp"] > target_user["mp_cap"]:
             target_user["mp"] = target_user["mp_cap"]
         
         save_data()
+        mp_display = format_mp(target_user)
         if target_user_id != user_id:
-            await message.channel.send(f"Added {recovery} Mp to <@{target_user_id}>! Current MP: {target_user['mp']} Mp")
+            await message.channel.send(f"Added {recovery} Mp to <@{target_user_id}>! MP: {mp_display} ({old_mp} → {target_user['mp']})")
         else:
-            await message.channel.send(f"Added {recovery} Mp! Current MP: {target_user['mp']} Mp")
+            await message.channel.send(f"Added {recovery} Mp! MP: {mp_display} ({old_mp} → {target_user['mp']})")
         return
 
     # SETTINGS COMMAND
@@ -803,10 +811,12 @@ Info: {card['info']}
                 return
             
             try:
+                old_mp = target_user["mp"]
                 new_mp = int(parts[3])
                 target_user["mp"] = new_mp
                 save_data()
-                await message.channel.send(f"Set MP for <@{target_user_id}> to: {new_mp} Mp")
+                mp_display = format_mp(target_user)
+                await message.channel.send(f"Set MP for <@{target_user_id}> to: {mp_display} ({old_mp} → {new_mp})")
             except ValueError:
                 await message.channel.send("Please provide a valid number.")
             return
@@ -858,7 +868,8 @@ Info: {card['info']}
         # Build the stats display
         stats = f"Max Mp: {target_user['mp_cap']}\n"
         stats += f"Mp Recovery: {target_user['mp_recovery']}\n"
-        stats += f"Deck Mode: {target_user['deck_mode']}\n\n"
+        stats += f"Deck Mode: {target_user['deck_mode']}\n"
+        stats += f"Current MP: {format_mp(target_user)}\n\n"
         stats += "**Inventory:**\n"
         
         # Sort inventory by card number
