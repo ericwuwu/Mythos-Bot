@@ -784,32 +784,72 @@ Info: {card['info']}
         await message.channel.send("L")
 
 # Run the bot
+# Run the bot
 if __name__ == "__main__":
     try:
-        token = os.getenv("DISCORD_BOT_TOKEN")
+        # Try multiple ways to get the token
+        token = os.getenv("DISCORD_BOT_TOKEN")  # Standard way
         
+        # If not found, try alternative names (just in case)
+        if not token:
+            token = os.getenv("DISCORD_TOKEN")
+        if not token:
+            token = os.getenv("TOKEN")
+        
+        # Debug: Show what we found (but hide most of the token)
+        if token:
+            print(f"Token found! Length: {len(token)} characters")
+            print(f"Token starts with: {token[:10]}...")
+        else:
+            print("No token found in environment variables!")
+            print("Available environment variables:")
+            for key in os.environ.keys():
+                print(f"  - {key}")
+        
+        # Fallback to hardcoded (for testing only)
         if not token:
             token = "YOUR_BOT_TOKEN_HERE"
+            print("Using hardcoded token (NOT RECOMMENDED for production)")
         
         if token == "YOUR_BOT_TOKEN_HERE" or not token:
             print("="*50)
-            print("ERROR: Please set your Discord bot token!")
+            print("ERROR: No valid token found!")
             print("="*50)
-            print("1. Go to Discord Developer Portal")
-            print("2. Get your bot token")
-            print("3. Set it as environment variable DISCORD_BOT_TOKEN")
-            print("4. NEVER commit real tokens to GitHub!")
+            print("Please set your Discord bot token as:")
+            print("Environment Variable: DISCORD_BOT_TOKEN")
+            print("")
+            print("On Railway:")
+            print("1. Go to your Railway dashboard")
+            print("2. Select your service")
+            print("3. Go to the 'Variables' tab")
+            print("4. Add a new variable:")
+            print("   Key: DISCORD_BOT_TOKEN")
+            print("   Value: [your bot token]")
+            print("5. Click 'Deploy' to restart with the new variable")
+            print("="*50)
         else:
-            print("Starting bot...")
+            print("Attempting to connect to Discord...")
             client.run(token)
             
     except discord.LoginFailure as e:
-        print(f"Login failed: {e}")
-        print("Please check your token is correct and not expired.")
+        print("="*50)
+        print("LOGIN FAILED!")
+        print("="*50)
+        print(f"Error: {e}")
+        print("Your token is invalid or expired.")
+        print("1. Go to https://discord.com/developers/applications")
+        print("2. Select your application")
+        print("3. Go to 'Bot' section")
+        print("4. Click 'Reset Token'")
+        print("5. Copy the new token")
+        print("6. Update your Railway environment variable")
+        print("7. Deploy again")
+        print("="*50)
     except discord.HTTPException as e:
         if e.status == 429:
-            print("Rate limited - too many requests")
+            print("Rate limited - too many requests. Waiting a few minutes...")
         else:
+            print(f"HTTP Exception: {e}")
             raise e
     except Exception as e:
         print(f"Unexpected error: {e}")
