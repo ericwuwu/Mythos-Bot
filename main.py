@@ -1,1015 +1,811 @@
 import os
-import random
 import discord
-from discord.ext import commands
-from typing import Optional
+import random
 import json
-import traceback
 
-# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='$', intents=intents)
 
-# Base deck
-BASE_DECK = [
-    "Fire - 3 Mp",
-    "Wind - 3 Mp", 
-    "Water - 3 Mp",
-    "Earth - 3 Mp",
-    "Ball - 2 Mp",
-    "Bolt - 2 Mp",
-    "Wall - 3 Mp",
-    "Burst - 3 Mp",
-    "Forward - 1 Mp",
-    "Down - 1 Mp",
-    "Orbit - 2 Mp",
-    "Split - 2 Mp"
-]
+client = discord.Client(intents=intents)
 
-# File for data persistence
-DATA_FILE = "player_data.json"
+# Define the complete library of cards
+card_library = {
+    1: {"name": "Fire", "mp": 3, "type": "Element", "info": "creates flames using mana"},
+    2: {"name": "Wind", "mp": 3, "type": "Element", "info": "creates wind using mana"},
+    3: {"name": "Water", "mp": 3, "type": "Element", "info": "creates water using mana"},
+    4: {"name": "Earth", "mp": 3, "type": "Element", "info": "creates earth using mana"},
+    5: {"name": "Null", "mp": 1, "type": "Element", "info": "solidifies pure mana, able to take on aspects of elements it comes in contact with"},
+    6: {"name": "Dark", "mp": 4, "type": "Element", "info": "creates darkness using mana, weak physically unless condensed"},
+    7: {"name": "Light", "mp": 4, "type": "Element", "info": "creates light using mana, weak physically unless condensed"},
+    8: {"name": "Magma", "mp": 5, "type": "Element", "info": "creates magma, a fusion of <Fire> and <Earth> using mana"},
+    9: {"name": "Lightning", "mp": 6, "type": "Element", "info": "creates lightning using mana, advanced form of <Fire> that strikes with clusters of electricity"},
+    10: {"name": "Ice", "mp": 5, "type": "Element", "info": "creates ice using mana, advanced form of <Water> that spreads its frozen touch"},
+    11: {"name": "Storm", "mp": 6, "type": "Element", "info": "creates miniature storms using mana, a fusion of <Wind> and <Water> (if condensed, chance of electricity generated is increased)"},
+    12: {"name": "Sound", "mp": 5, "type": "Element", "info": "creates sound using mana, advanced form of <Wind> that uses precise manipulation and could create shockwaves"},
+    13: {"name": "Vacuum", "mp": 6, "type": "Element", "info": "creates a vacuum using mana, advanced form of <Wind> that sucks out the very matter from a area"},
+    14: {"name": "Metal", "mp": 5, "type": "Element", "info": "creates metal using mana, advanced form of <Earth> that forms reinforced alloy several times stronger than stone (its traits can vary)"},
+    15: {"name": "Gravity", "mp": 6, "type": "Element", "info": "creates a gravity field using mana, advanced form of <Earth> that warps space towards a direction"},
+    16: {"name": "Demonic", "mp": 6, "type": "Element", "info": "summons demonic energy using mana, eats away at the one's flesh using their sins and leaving the wound difficult to heal (optional targeting)"},
+    17: {"name": "Divine", "mp": 6, "type": "Element", "info": "summons divine energy using mana, judges targets for their sins and mends the wounds of allies (optional targeting)"},
+    18: {"name": "Hellfire", "mp": 8, "type": "Element", "info": "creates hellfire using mana, a fusion of <Fire> and <Divine> that passes judgement on a target, burning for as long as their sins can fuel it (optional targeting, can heal allies)"},
+    19: {"name": "Permafrost", "mp": 8, "type": "Element", "info": "creates permafrost using mana, a fusion of <Ice> and <Demonic> that corrodes one's skin, freezing it for as long as their sins can fuel it (optional targeting, hard to heal)"},
+    20: {"name": "Void", "mp": 10, "type": "Element", "info": "creates a void, a tear in space using mana that rips apart anything it touches, its sheer power makes it difficult to manipulate as a element, causing elements, shapes, and trajectories added to be double cost (the void is slow moving but overwhelmingly powerful)"},
+    21: {"name": "Ball", "mp": 2, "type": "Shape", "info": "condenses the element into a ball, rupturing when broken"},
+    22: {"name": "Bolt", "mp": 2, "type": "Shape", "info": "condenses the element into a javelin, piercing those in its path"},
+    23: {"name": "Wall", "mp": 3, "type": "Shape", "info": "condenses the element into a wall about 6 by 6 ft in length (able to be slightly changed)"},
+    24: {"name": "Burst", "mp": 3, "type": "Shape", "info": "condenses the element that then explodes out in every direction with great force"},
+    25: {"name": "Slash", "mp": 2, "type": "Shape", "info": "condenses the element into a crescent shape able to cut through those in its way"},
+    26: {"name": "Pillar", "mp": 4, "type": "Shape", "info": "shoots out a element in a circular beam several feet wide from the ground/sky in a vertical direction for several seconds"},
+    27: {"name": "Swamp", "mp": 5, "type": "Shape", "info": "spreads the element on the ground in a 10 feet diameter"},
+    28: {"name": "Beam", "mp": 4, "type": "Shape", "info": "shoots out a element in a small circular beam like a laser for several seconds"},
+    29: {"name": "Wire", "mp": 2, "type": "Shape", "info": "condenses the element into a single sharp thread, its length variable"},
+    30: {"name": "Trail", "mp": 2, "type": "Shape", "info": "leaves a trail of a element as the spells move, the lingering effect is a weaker version of said element"},
+    31: {"name": "Forward", "mp": 1, "type": "Command", "info": "propels a spell forward, its direction is varying"},
+    32: {"name": "Down", "mp": 1, "type": "Command", "info": "slams the spell downwards quickly"},
+    33: {"name": "Spin", "mp": 2, "type": "Command", "info": "spins the entire or parts of the spell around"},
+    34: {"name": "Split", "mp": 2, "type": "Command", "info": "splits a spell into smaller versions, number of splits varying"},
+    35: {"name": "Reverse", "mp": "Variable", "type": "Command", "info": "reverses the trajectory that went before it"},
+    36: {"name": "Chain", "mp": 3, "type": "Command", "info": "chain the spell's effect from one target to another near each other"},
+    37: {"name": "Trap", "mp": 4, "type": "Command", "info": "places a spell on the ground that is activated when something is over its surface"},
+    38: {"name": "Arc", "mp": 2, "type": "Command", "info": "propels a spell forward in a arc, its direction varying"},
+    39: {"name": "Expand", "mp": "Variable", "type": "Command", "info": "doubles the size of a spell, costing x2 more Mp each size double"},
+    40: {"name": "Shrink", "mp": "Variable", "type": "Command", "info": "halves the size of a spell, costing x2 more Mp each size is halved"},
+    41: {"name": "Drill", "mp": 4, "type": "Command", "info": "propel a spell forward in a arc, piercing through environments in its way"},
+    42: {"name": "Turn", "mp": 1, "type": "Command", "info": "a weaker <forward> used to make a spell redirect towards the target"},
+    43: {"name": "Homing", "mp": 3, "type": "Command", "info": "curves the spell towards a target slightly"},
+    44: {"name": "Ripple", "mp": 5, "type": "Command", "info": "sends out a spell in a 360 wave that ripples outward, fast at first but slows as it goes further (stops at environments blocking its way)"},
+    45: {"name": "Delay", "mp": 1, "type": "Command", "info": "delays the next cards in sequence for a spell, time delayed varying"},
+    46: {"name": "Curse", "mp": 5, "type": "Command", "info": "curses the target based on how much the spell hits them and activates the next spell"},
+    47: {"name": "Soften", "mp": "Variable", "type": "Command", "info": "softens the spell or spell shape, intensity based on amount of mp used"},
+    48: {"name": "Harden", "mp": "Variable", "type": "Command", "info": "hardens the spell or spell shape, intensity based on amount of mp used"},
+    49: {"name": "External", "mp": 3, "type": "Command", "info": "gathers the element specified and allows the user to manipulate it with spell cards"},
+    50: {"name": "Memory", "mp": "Variable", "type": "Command", "info": "copies cards used recently, the cards costing the mirrored cards' total mp +1 mp per card"}
+}
 
-# Player data structure
-player_data = {}
+# Data structure for each user
+# {
+#   "mp": 0,
+#   "mp_recovery": 4,
+#   "mp_cap": 0,
+#   "inventory": {},  # card_number: quantity
+#   "active_deck": [],  # list of card numbers
+#   "deck_mode": "limitless",  # or "limited"
+#   "hand": [],  # 6 cards currently in hand
+#   "bad_luck_streak": 0,
+#   "good_luck_streak": 0
+# }
+
+user_data = {}
+
+# File to save data
+DATA_FILE = "user_data.json"
 
 def load_data():
-    """Load player data from file"""
-    global player_data
+    global user_data
     try:
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, 'r') as f:
-                player_data = json.load(f)
-            print(f"✅ Loaded data for {len(player_data)} players")
+                user_data = json.load(f)
+                print("Data loaded successfully!")
         else:
-            print("📁 No existing data file found, starting fresh")
-            player_data = {}
+            print("No save file found, starting fresh.")
     except Exception as e:
-        print(f"❌ Error loading data: {e}")
-        player_data = {}
+        print(f"Error loading data: {e}")
+        user_data = {}
 
 def save_data():
-    """Save player data to file"""
     try:
         with open(DATA_FILE, 'w') as f:
-            json.dump(player_data, f, indent=2)
-        print("💾 Data saved")
+            json.dump(user_data, f, indent=4)
+            print("Data saved successfully!")
     except Exception as e:
-        print(f"❌ Error saving data: {e}")
+        print(f"Error saving data: {e}")
 
-def create_default_player():
-    """Create a default player structure"""
-    return {
-        "current_deck": "1",
-        "decks": {
-            "1": {
-                "name": "Deck 1",
-                "cards": BASE_DECK.copy(),
-                "hand_size": 6,
-                "max_mp": 10,
-                "current_mp": 10,
-                "stats": "",
-                "hand": []
-            },
-            "2": {
-                "name": "Deck 2",
-                "cards": [],
-                "hand_size": 6,
-                "max_mp": 10,
-                "current_mp": 10,
-                "stats": "",
-                "hand": []
-            },
-            "3": {
-                "name": "Deck 3",
-                "cards": [],
-                "hand_size": 6,
-                "max_mp": 10,
-                "current_mp": 10,
-                "stats": "",
-                "hand": []
-            },
-            "4": {
-                "name": "Deck 4",
-                "cards": [],
-                "hand_size": 6,
-                "max_mp": 10,
-                "current_mp": 10,
-                "stats": "",
-                "hand": []
-            },
-            "5": {
-                "name": "Deck 5",
-                "cards": [],
-                "hand_size": 6,
-                "max_mp": 10,
-                "current_mp": 10,
-                "stats": "",
-                "hand": []
-            }
-        }
-    }
-
-def get_player(user_id):
-    """Get or create player data"""
+def get_user(user_id):
     user_id = str(user_id)
-    if user_id not in player_data:
-        player_data[user_id] = create_default_player()
+    if user_id not in user_data:
+        user_data[user_id] = {
+            "mp": 0,
+            "mp_recovery": 4,
+            "mp_cap": 0,
+            "inventory": {},
+            "active_deck": [],
+            "deck_mode": "limitless",
+            "hand": [],
+            "bad_luck_streak": 0,
+            "good_luck_streak": 0
+        }
         save_data()
-        print(f"✅ Created new player: {user_id}")
-    return player_data[user_id]
+    return user_data[user_id]
 
-def get_current_deck(user_id):
-    """Get current deck for a user"""
-    player = get_player(user_id)
-    deck_num = player["current_deck"]
-    
-    # Ensure the deck exists (for legacy data)
-    if deck_num not in player["decks"]:
-        print(f"⚠️ Deck {deck_num} not found for {user_id}, resetting to deck 1")
-        player["current_deck"] = "1"
-        deck_num = "1"
-    
-    return player["decks"][deck_num]
+def format_card(card_num):
+    card = card_library[card_num]
+    if card["mp"] == "Variable":
+        return f"{card['name']} - Variable Mp ({card['type']})"
+    return f"{card['name']} - {card['mp']} Mp ({card['type']})"
 
-def is_admin(ctx):
-    """Check if user is admin"""
-    return ctx.author.guild_permissions.administrator
+def format_hand(hand):
+    if not hand:
+        return "No cards in hand."
+    result = ""
+    for i, card_num in enumerate(hand, 1):
+        result += f"{i}. {format_card(card_num)}\n"
+    return result
 
-def parse_mention_at_end(args):
-    """Parse arguments to check for mention at the end"""
-    if not args:
-        return None, args
-    
-    # Convert to list if it's a tuple
-    args_list = list(args) if isinstance(args, tuple) else args
-    
-    # Check if last arg is a mention
-    if args_list and args_list[-1].startswith('<@') and args_list[-1].endswith('>'):
-        return args_list[-1], args_list[:-1]
-    return None, args_list
+def format_active_deck(deck):
+    if not deck:
+        return "Empty"
+    result = ""
+    for i, card_num in enumerate(deck, 1):
+        result += f"{i}. {format_card(card_num)}\n"
+    return result
 
-@bot.event
+def format_inventory(inventory):
+    if not inventory:
+        return "Empty"
+    result = ""
+    for card_num, quantity in inventory.items():
+        card_num = int(card_num)
+        if card_num in card_library:
+            card = card_library[card_num]
+            result += f"{card_num}. {card['name']} - {quantity}x\n"
+    return result
+
+def smart_d20_roll(user_id):
+    user = get_user(user_id)
+    bad_streak = user["bad_luck_streak"]
+    good_streak = user["good_luck_streak"]
+    
+    # Base roll
+    roll = random.randint(1, 20)
+    
+    # Apply bad luck streak modifier (makes low rolls rarer)
+    if bad_streak > 0 and roll <= 5:
+        # Reduced chance of low rolls
+        if bad_streak >= 5:
+            reduction = 0.8
+        else:
+            reduction = bad_streak * 0.15  # 15% per streak up to 75%
+        
+        # Try to reroll if we hit a low number
+        if random.random() < reduction:
+            # Reroll with higher numbers weighted
+            roll = random.randint(5 + bad_streak, 20)
+    
+    # Apply good luck streak modifier (makes high rolls rarer after too many good rolls)
+    if good_streak > 0:
+        # After 2 good rolls, start making bad rolls more likely
+        if good_streak >= 2:
+            # Calculate bonus chance for bad rolls
+            bad_bonus = 0.1  # 10% base
+            
+            # If roll was high, increase the bonus
+            if roll >= 10:
+                bad_bonus *= 1.5
+            if roll >= 15:
+                bad_bonus *= 2.0
+            
+            # Chance to reduce the roll
+            if random.random() < bad_bonus:
+                # Reduce the roll by a random amount
+                reduction_amount = random.randint(1, min(10, good_streak * 2))
+                roll = max(1, roll - reduction_amount)
+    
+    # Update streaks based on roll
+    if roll <= 5:
+        user["bad_luck_streak"] += 1
+        user["good_luck_streak"] = max(0, user["good_luck_streak"] - 1)
+    elif roll >= 16:
+        user["good_luck_streak"] += 1
+        user["bad_luck_streak"] = max(0, user["bad_luck_streak"] - 1)
+    else:
+        # Middle rolls gradually reduce streaks
+        user["bad_luck_streak"] = max(0, user["bad_luck_streak"] - 0.5)
+        user["good_luck_streak"] = max(0, user["good_luck_streak"] - 0.5)
+    
+    # Cap streaks
+    user["bad_luck_streak"] = min(10, user["bad_luck_streak"])
+    user["good_luck_streak"] = min(10, user["good_luck_streak"])
+    
+    save_data()
+    return roll
+
+def ensure_category_balance(hand):
+    """Ensure hand has at least one of each category (Element, Shape, Command)"""
+    categories = {"Element": 0, "Shape": 0, "Command": 0}
+    
+    # Count current categories
+    for card_num in hand:
+        if card_num in card_library:
+            card_type = card_library[card_num]["type"]
+            if card_type in categories:
+                categories[card_type] += 1
+    
+    # Check which categories are missing
+    missing_categories = [cat for cat, count in categories.items() if count == 0]
+    
+    if not missing_categories:
+        return hand  # All categories present
+    
+    # Replace duplicate categories with missing ones
+    new_hand = hand.copy()
+    category_counts = {"Element": 0, "Shape": 0, "Command": 0}
+    
+    # Count categories in current hand
+    for card_num in new_hand:
+        if card_num in card_library:
+            card_type = card_library[card_num]["type"]
+            if card_type in category_counts:
+                category_counts[card_type] += 1
+    
+    # Find cards to replace (from categories with counts > 1)
+    for i, card_num in enumerate(new_hand):
+        if card_num in card_library:
+            card_type = card_library[card_num]["type"]
+            if category_counts.get(card_type, 0) > 1:
+                # This category has duplicates, can replace one
+                for missing_cat in missing_categories:
+                    # Find a card of the missing category
+                    possible_cards = [num for num, card in card_library.items() 
+                                    if card["type"] == missing_cat and num not in new_hand]
+                    if possible_cards:
+                        new_hand[i] = random.choice(possible_cards)
+                        category_counts[card_type] -= 1
+                        category_counts[missing_cat] = category_counts.get(missing_cat, 0) + 1
+                        missing_categories.remove(missing_cat)
+                        break
+        if not missing_categories:
+            break
+    
+    return new_hand
+
+@client.event
 async def on_ready():
     load_data()
-    print(f'✅ Bot ready: {bot.user}')
-    print(f'✅ Servers: {len(bot.guilds)}')
-    print(f'✅ Use $helpme for commands')
+    print(f'We have logged in as {client.user}')
 
-@bot.event
-async def on_command_error(ctx, error):
-    """Global error handler"""
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"❌ Missing argument: {error}")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send(f"❌ Invalid argument: {error}")
-    elif isinstance(error, commands.CommandNotFound):
-        # Ignore unknown commands
-        pass
-    else:
-        # Log the error
-        print(f"❌ Error in command {ctx.command}: {error}")
-        traceback.print_exc()
-        await ctx.send(f"❌ An error occurred. Use $helpme for commands.")
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
 
-# ===== TEST COMMAND =====
+    content = message.content
+    user_id = str(message.author.id)
+    user = get_user(user_id)
+    
+    # HELP COMMAND
+    if content.startswith('$help') or content.startswith('/help'):
+        help_text = """
+**Available Commands:**
+`$library all/element/shape/command` - View cards by category
+`$info #` - Get card details
+`$add` (two lines: card_number quantity) - Add cards to inventory
+`$cards` - Check full inventory
+`$use # # #` - Put cards into active deck (takes from inventory)
+`$deck` - Show current active deck
+`$plus #` - Add card to active deck (even after draw)
+`$draw` - Draw 6 cards from active deck (clears after)
+`$num # +/-#` - Modify card quantities
+`$num random #/all` - Randomize quantities
+`$mp turn` - Add MP recovery
+`$settings turn #` - Set MP recovery
+`$settings deck # limited/limitless` - Set deck mode
+`$reset all` - Full reset for everyone
+`$x #` - Reroll cards (with category protection)
+`$r` - Roll d20 with smart RNG
+`$hand` - Show current hand
+        """
+        await message.channel.send(help_text)
+        return
 
-@bot.command()
-async def ping(ctx):
-    """Test if bot is working"""
-    await ctx.send("🏓 Pong! Bot is working.")
+    # LIBRARY COMMAND
+    if content.startswith('$library') or content.startswith('/library'):
+        parts = content.split()
+        category = parts[1] if len(parts) > 1 else "all"
+        
+        result = "**Card Library:**\n"
+        if category == "all":
+            for num, card in card_library.items():
+                if card["mp"] == "Variable":
+                    result += f"{num}. {card['name']} - Variable Mp ({card['type']})\n"
+                else:
+                    result += f"{num}. {card['name']} - {card['mp']} Mp ({card['type']})\n"
+        else:
+            # Filter by category
+            category_map = {"element": "Element", "shape": "Shape", "command": "Command"}
+            cat_filter = category_map.get(category.lower(), category.capitalize())
+            
+            for num, card in card_library.items():
+                if card["type"] == cat_filter:
+                    if card["mp"] == "Variable":
+                        result += f"{num}. {card['name']} - Variable Mp ({card['type']})\n"
+                    else:
+                        result += f"{num}. {card['name']} - {card['mp']} Mp ({card['type']})\n"
+        
+        await message.channel.send(result[:2000])  # Discord message limit
+        return
 
-# ===== DECK MANAGEMENT =====
-
-@bot.command()
-async def deck(ctx, action: str, member: Optional[discord.Member] = None):
-    """Switch or reset decks: $deck 2, $deck 3 @player, or $deck reset"""
-    try:
-        if action.lower() == "reset":
-            target = member or ctx.author
-            
-            if member and not is_admin(ctx):
-                await ctx.send("❌ Only admins can reset other players' decks!")
-                return
-            
-            player = get_player(target.id)
-            deck_num = player["current_deck"]
-            deck = player["decks"][deck_num]
-            
-            # Reset deck to defaults
-            deck["name"] = f"Deck {deck_num}"
-            deck["cards"] = [] if deck_num != "1" else BASE_DECK.copy()
-            deck["hand_size"] = 6
-            deck["max_mp"] = 10
-            deck["current_mp"] = 10
-            deck["stats"] = ""
-            deck["hand"] = []
-            
-            save_data()
-            
-            if target.id == ctx.author.id:
-                await ctx.send(f"✅ Reset your Deck {deck_num} to default settings")
-            else:
-                await ctx.send(f"✅ Admin reset {target.display_name}'s Deck {deck_num} to default settings")
+    # INFO COMMAND
+    if content.startswith('$info') or content.startswith('/info'):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Please specify a card number. Example: `$info 1`")
             return
         
-        # Handle deck switching (numeric)
         try:
-            deck_num = int(action)
+            card_num = int(parts[1])
+            if card_num not in card_library:
+                await message.channel.send(f"Card #{card_num} not found in library.")
+                return
+            
+            card = card_library[card_num]
+            info_text = f"""
+**Card #{card_num}: {card['name']}**
+Type: {card['type']}
+MP Cost: {card['mp']} Mp
+Info: {card['info']}
+            """
+            await message.channel.send(info_text)
         except ValueError:
-            await ctx.send("❌ Use: `$deck 2`, `$deck 3 @player`, or `$deck reset`")
-            return
-        
-        target = member or ctx.author
-        
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can switch other players' decks!")
-            return
-        
-        if deck_num < 1 or deck_num > 5:
-            await ctx.send("❌ Deck number must be between 1 and 5!")
-            return
-        
-        player = get_player(target.id)
-        old_deck = player["current_deck"]
-        player["current_deck"] = str(deck_num)
-        
-        # Reset hand and MP when switching decks
-        current = get_current_deck(target.id)
-        current["hand"] = []
-        current["current_mp"] = current["max_mp"]
-        
-        save_data()
-        
-        if target.id == ctx.author.id:
-            await ctx.send(f"✅ Switched from Deck {old_deck} to Deck {deck_num} ({current['name']})")
-        else:
-            await ctx.send(f"✅ Admin switched {target.display_name} from Deck {old_deck} to Deck {deck_num} ({current['name']})")
-    
-    except Exception as e:
-        print(f"Error in deck command: {e}")
-        traceback.print_exc()
-        await ctx.send(f"❌ Error in deck command.")
+            await message.channel.send("Please provide a valid number.")
+        return
 
-@bot.command()
-async def decks(ctx, member: Optional[discord.Member] = None):
-    """Show list of decks with preview: $decks or $decks @player"""
-    try:
-        target = member or ctx.author
+    # ADD COMMAND - Two line format
+    if content.startswith('$add') or content.startswith('/add'):
+        # Wait for the next message with the numbers
+        await message.channel.send("Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
         
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can view other players' decks!")
-            return
+        def check(m):
+            return m.author == message.author and m.channel == message.channel
         
-        player = get_player(target.id)
-        
-        response = f"**{target.display_name}'s Decks:**\n"
-        
-        for deck_num in range(1, 6):
-            deck = player["decks"][str(deck_num)]
-            current_marker = "✅ " if int(player["current_deck"]) == deck_num else ""
-            response += f"\n{current_marker}**Deck {deck_num}: {deck['name']}** ({len(deck['cards'])} cards)\n"
+        try:
+            # Get the next message
+            msg = await client.wait_for('message', timeout=60.0, check=check)
+            lines = msg.content.strip().split('\n')
             
-            # Show preview of first 3 cards
-            if deck["cards"]:
-                preview = ", ".join([f"`{c[:20]}...`" if len(c) > 20 else f"`{c}`" for c in deck["cards"][:3]])
-                if len(deck["cards"]) > 3:
-                    preview += f" and {len(deck['cards']) - 3} more"
-                response += f"Preview: {preview}\n"
-            else:
-                response += "Preview: *Empty deck*\n"
-        
-        # Handle long messages
-        if len(response) > 2000:
-            parts = [response[i:i+1900] for i in range(0, len(response), 1900)]
-            for i, part in enumerate(parts, 1):
-                await ctx.send(f"**Part {i}:**\n{part}")
-        else:
-            await ctx.send(response)
-    
-    except Exception as e:
-        print(f"Error in decks command: {e}")
-        await ctx.send(f"❌ Error in decks command.")
-
-@bot.command()
-async def name(ctx, *, text: str):
-    """Set current deck name: $name My Arena Deck"""
-    try:
-        parts = text.strip().split()
-        
-        # Check for mention at the end
-        mention, name_parts = parse_mention_at_end(parts)
-        
-        if mention:
-            # Admin setting someone else's name
-            if not is_admin(ctx):
-                await ctx.send("❌ Only admins can set names for other players!")
-                return
-            
-            try:
-                member = await commands.MemberConverter().convert(ctx, mention)
-            except:
-                await ctx.send("Invalid user mention!")
-                return
-            
-            deck_name = " ".join(name_parts)
-            if not deck_name:
-                await ctx.send("Please provide a name!")
-                return
-            
-            current = get_current_deck(member.id)
-            current["name"] = deck_name
-            save_data()
-            await ctx.send(f"✅ Set {member.display_name}'s current deck name to: {deck_name}")
-        
-        else:
-            # Setting own name
-            if not text:
-                await ctx.send("Please provide a name!")
-                return
-            
-            current = get_current_deck(ctx.author.id)
-            current["name"] = text
-            save_data()
-            await ctx.send(f"✅ Set your current deck name to: {text}")
-    
-    except Exception as e:
-        print(f"Error in name command: {e}")
-        await ctx.send(f"❌ Error in name command.")
-
-# ===== CARD MANAGEMENT =====
-
-@bot.command()
-async def cards(ctx, member: Optional[discord.Member] = None):
-    """Show deck cards: $cards or $cards @player"""
-    try:
-        target = member or ctx.author
-        
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can view other players' decks!")
-            return
-        
-        current = get_current_deck(target.id)
-        
-        if not current["cards"]:
-            await ctx.send(f"{target.display_name}'s current deck is empty!")
-            return
-        
-        response = f"**{target.display_name}'s {current['name']}** ({len(current['cards'])} cards):\n"
-        for i, card in enumerate(current["cards"], 1):
-            response += f"{i}. {card}\n"
-        
-        # Handle long messages
-        if len(response) > 2000:
-            await ctx.send(f"**{target.display_name}'s {current['name']}** (Part 1):")
-            part = ""
-            for i, card in enumerate(current["cards"], 1):
-                if len(part) + len(f"{i}. {card}\n") > 1900:
-                    await ctx.send(part)
-                    part = ""
-                part += f"{i}. {card}\n"
-            if part:
-                await ctx.send(part)
-        else:
-            await ctx.send(response)
-    
-    except Exception as e:
-        print(f"Error in cards command: {e}")
-        await ctx.send(f"❌ Error in cards command.")
-
-@bot.command()
-async def add(ctx, *, text: str):
-    """Add cards: $add Fire - 3 Mp (one per line for multiple)"""
-    try:
-        # Check if this is a bulk add (contains line breaks)
-        if '\n' in text:
-            lines = text.strip().split('\n')
-            cards_to_add = []
-            mention = None
-            
+            added_cards = []
             for line in lines:
-                line = line.strip()
-                if not line:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    try:
+                        card_num = int(parts[0])
+                        quantity = int(parts[1])
+                        
+                        if card_num not in card_library:
+                            await message.channel.send(f"Card #{card_num} not found in library.")
+                            continue
+                        
+                        # Add to inventory
+                        if user["deck_mode"] == "limited":
+                            # In limited mode, each card starts with 5
+                            if str(card_num) not in user["inventory"]:
+                                user["inventory"][str(card_num)] = 5
+                            # Add the specified quantity
+                            user["inventory"][str(card_num)] += quantity
+                        else:
+                            # In limitless mode, add the quantity (or unlimited)
+                            if str(card_num) not in user["inventory"]:
+                                user["inventory"][str(card_num)] = 0
+                            user["inventory"][str(card_num)] += quantity
+                        
+                        added_cards.append(f"#{card_num} x{quantity}")
+                    except ValueError:
+                        await message.channel.send(f"Invalid input: '{line}'. Skipping.")
+            
+            if added_cards:
+                save_data()
+                await message.channel.send(f"Added: {', '.join(added_cards)}\nUse `$use` to equip them to your active deck.")
+            else:
+                await message.channel.send("No valid cards added.")
+                
+        except TimeoutError:
+            await message.channel.send("Command timed out. Please try again.")
+        return
+
+    # CARDS COMMAND (Inventory)
+    if content.startswith('$cards') or content.startswith('/cards'):
+        inventory = user["inventory"]
+        if not inventory:
+            await message.channel.send("Your inventory is empty. Use `$add` to add cards.")
+            return
+        
+        result = "**Your Cards (Inventory):**\n"
+        for card_num, quantity in inventory.items():
+            card_num = int(card_num)
+            if card_num in card_library:
+                card = card_library[card_num]
+                if user["deck_mode"] == "limitless":
+                    result += f"{card_num}. {card['name']} - ∞ (Limitless)\n"
+                else:
+                    result += f"{card_num}. {card['name']} - {quantity}x\n"
+        
+        await message.channel.send(result[:2000])
+        return
+
+    # USE COMMAND - Add cards to active deck
+    if content.startswith('$use') or content.startswith('/use'):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Please specify which cards to use. Example: `$use 1 2 3`")
+            return
+        
+        added_cards = []
+        for part in parts[1:]:
+            try:
+                card_num = int(part)
+                if card_num not in card_library:
+                    await message.channel.send(f"Card #{card_num} not found in library.")
                     continue
                 
-                if line.startswith('<@') and line.endswith('>'):
-                    mention = line
-                else:
-                    cards_to_add.append(line)
-            
-            if not cards_to_add:
-                await ctx.send("No valid cards found to add!")
-                return
-            
-            # Handle mention (admin adding to someone)
-            if mention:
-                if not is_admin(ctx):
-                    await ctx.send("❌ Only admins can add cards to other players!")
-                    return
+                # Check if user has the card in inventory
+                if str(card_num) not in user["inventory"] or user["inventory"][str(card_num)] <= 0:
+                    await message.channel.send(f"You don't have card #{card_num} in your inventory.")
+                    continue
                 
-                try:
-                    member = await commands.MemberConverter().convert(ctx, mention)
-                except:
-                    await ctx.send("Invalid user mention!")
-                    return
+                # Add to active deck
+                user["active_deck"].append(card_num)
                 
-                current = get_current_deck(member.id)
-                added_count = 0
-                for card in cards_to_add:
-                    current["cards"].append(card)
-                    added_count += 1
+                # Remove from inventory if limited mode
+                if user["deck_mode"] == "limited":
+                    user["inventory"][str(card_num)] -= 1
+                    if user["inventory"][str(card_num)] <= 0:
+                        del user["inventory"][str(card_num)]
+                # In limitless mode, keep in inventory
                 
-                save_data()
-                
-                preview = ", ".join([f"`{c[:20]}...`" if len(c) > 20 else f"`{c}`" for c in cards_to_add[:3]])
-                if added_count > 3:
-                    preview += f" and {added_count - 3} more"
-                
-                await ctx.send(f"✅ Admin added {added_count} card(s) to {member.display_name}'s deck\n{preview}\nDeck now has {len(current['cards'])} cards.")
-                return
-            
-            # Adding to self (multiple cards)
-            current = get_current_deck(ctx.author.id)
-            added_count = 0
-            for card in cards_to_add:
-                current["cards"].append(card)
-                added_count += 1
-            
-            save_data()
-            
-            preview = ", ".join([f"`{c[:20]}...`" if len(c) > 20 else f"`{c}`" for c in cards_to_add[:3]])
-            if added_count > 3:
-                preview += f" and {added_count - 3} more"
-            
-            await ctx.send(f"✅ Added {added_count} card(s) to your deck\n{preview}\nDeck now has {len(current['cards'])} cards.")
-        
-        else:
-            # Single card add
-            parts = text.strip().split()
-            mention, card_parts = parse_mention_at_end(parts)
-            
-            if mention:
-                # Admin adding to someone
-                if not is_admin(ctx):
-                    await ctx.send("❌ Only admins can add cards to other players!")
-                    return
-                
-                try:
-                    member = await commands.MemberConverter().convert(ctx, mention)
-                except:
-                    await ctx.send("Invalid user mention!")
-                    return
-                
-                card_text = " ".join(card_parts)
-                current = get_current_deck(member.id)
-                current["cards"].append(card_text)
-                save_data()
-                await ctx.send(f"✅ Admin added to {member.display_name}'s deck: `{card_text}`\nDeck now has {len(current['cards'])} cards.")
-            
-            else:
-                # Adding to self
-                current = get_current_deck(ctx.author.id)
-                current["cards"].append(text)
-                save_data()
-                await ctx.send(f"✅ Added to your deck: `{text}`\nDeck now has {len(current['cards'])} cards.")
-    
-    except Exception as e:
-        print(f"Error in add command: {e}")
-        traceback.print_exc()
-        await ctx.send(f"❌ Error in add command.")
-
-@bot.command()
-async def remove(ctx, *args):
-    """Remove cards: $remove 1 3 5 or $remove 1 3 @player"""
-    try:
-        if not args:
-            await ctx.send("Specify cards to remove: `$remove 1 3 5`")
-            return
-        
-        mention, numbers = parse_mention_at_end(args)
-        
-        if mention:
-            # Admin removing from someone
-            if not is_admin(ctx):
-                await ctx.send("❌ Only admins can remove cards from other players!")
-                return
-            
-            try:
-                member = await commands.MemberConverter().convert(ctx, mention)
-            except:
-                await ctx.send("Invalid user mention!")
-                return
-            
-            current = get_current_deck(member.id)
-            
-            if not current["cards"]:
-                await ctx.send(f"{member.display_name}'s deck is empty!")
-                return
-            
-            # Convert to integers and validate
-            indices = []
-            for num in numbers:
-                try:
-                    idx = int(num)
-                    if 1 <= idx <= len(current["cards"]):
-                        indices.append(idx)
-                    else:
-                        await ctx.send(f"Invalid number: {num} (must be 1-{len(current['cards'])})")
-                        return
-                except ValueError:
-                    await ctx.send(f"Invalid number: {num}")
-                    return
-            
-            # Remove in reverse order
-            removed = []
-            for idx in sorted(indices, reverse=True):
-                removed.append(current["cards"].pop(idx - 1))
-            
-            save_data()
-            
-            removed_list = ", ".join([f"`{c}`" for c in reversed(removed)])
-            await ctx.send(f"✅ Admin removed from {member.display_name}'s deck: {removed_list}\nDeck now has {len(current['cards'])} cards.")
-        
-        else:
-            # Removing from self
-            current = get_current_deck(ctx.author.id)
-            numbers = args
-            
-            if not current["cards"]:
-                await ctx.send("Your deck is empty!")
-                return
-            
-            # Convert to integers and validate
-            indices = []
-            for num in numbers:
-                try:
-                    idx = int(num)
-                    if 1 <= idx <= len(current["cards"]):
-                        indices.append(idx)
-                    else:
-                        await ctx.send(f"Invalid number: {num} (must be 1-{len(current['cards'])})")
-                        return
-                except ValueError:
-                    await ctx.send(f"Invalid number: {num}")
-                    return
-            
-            # Remove in reverse order
-            removed = []
-            for idx in sorted(indices, reverse=True):
-                removed.append(current["cards"].pop(idx - 1))
-            
-            save_data()
-            
-            removed_list = ", ".join([f"`{c}`" for c in reversed(removed)])
-            await ctx.send(f"✅ Removed: {removed_list}\nDeck now has {len(current['cards'])} cards.")
-    
-    except Exception as e:
-        print(f"Error in remove command: {e}")
-        await ctx.send(f"❌ Error in remove command.")
-
-@bot.command()
-async def clear(ctx, member: Optional[discord.Member] = None):
-    """Clear current deck: $clear or $clear @player"""
-    try:
-        target = member or ctx.author
-        
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can clear other players' decks!")
-            return
-        
-        current = get_current_deck(target.id)
-        current["cards"] = []
-        save_data()
-        
-        if target.id == ctx.author.id:
-            await ctx.send(f"✅ Cleared your current deck ({current['name']})")
-        else:
-            await ctx.send(f"✅ Admin cleared {target.display_name}'s current deck ({current['name']})")
-    
-    except Exception as e:
-        print(f"Error in clear command: {e}")
-        await ctx.send(f"❌ Error in clear command.")
-
-@bot.command()
-async def default(ctx, member: Optional[discord.Member] = None):
-    """Reset to base deck: $default or $default @player"""
-    try:
-        target = member or ctx.author
-        
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can reset other players' decks!")
-            return
-        
-        current = get_current_deck(target.id)
-        current["cards"] = BASE_DECK.copy()
-        save_data()
-        
-        if target.id == ctx.author.id:
-            await ctx.send(f"✅ Reset your current deck ({current['name']}) to base deck ({len(BASE_DECK)} cards)")
-        else:
-            await ctx.send(f"✅ Admin reset {target.display_name}'s current deck ({current['name']}) to base deck")
-    
-    except Exception as e:
-        print(f"Error in default command: {e}")
-        await ctx.send(f"❌ Error in default command.")
-
-# ===== GAME PLAY =====
-
-@bot.command()
-async def draw(ctx, member: Optional[discord.Member] = None):
-    """Draw a hand: $draw or $draw @player (admin only for others)"""
-    try:
-        target = member or ctx.author
-        
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can draw for other players!")
-            return
-        
-        current = get_current_deck(target.id)
-        
-        if len(current["cards"]) < current["hand_size"]:
-            await ctx.send(f"❌ {target.display_name} needs at least {current['hand_size']} cards in their deck! (Has {len(current['cards'])})")
-            return
-        
-        # Draw hand
-        current["hand"] = random.sample(current["cards"], current["hand_size"])
-        save_data()
-        
-        # Show hand with MP
-        response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']}\n"
-        for i, card in enumerate(current["hand"], 1):
-            response += f"{i}. {card}\n"
-        
-        await ctx.send(response)
-    
-    except Exception as e:
-        print(f"Error in draw command: {e}")
-        traceback.print_exc()
-        await ctx.send(f"❌ Error in draw command.")
-
-@bot.command()
-async def x(ctx, *args):
-    """Replace cards: $x 1 3 5 or $x 1 3 5 @player (admin only for others)"""
-    try:
-        if not args:
-            await ctx.send("Specify cards to replace: `$x 1 3 5`")
-            return
-        
-        mention, card_numbers = parse_mention_at_end(args)
-        
-        if mention:
-            if not is_admin(ctx):
-                await ctx.send("❌ Only admins can replace cards for other players!")
-                return
-            
-            try:
-                member = await commands.MemberConverter().convert(ctx, mention)
-            except:
-                await ctx.send("Invalid user mention!")
-                return
-            
-            target = member
-        else:
-            target = ctx.author
-            card_numbers = args
-        
-        current = get_current_deck(target.id)
-        
-        if not current["hand"]:
-            await ctx.send(f"{target.display_name} hasn't drawn a hand yet!")
-            return
-        
-        if not card_numbers:
-            await ctx.send("Specify cards to replace!")
-            return
-        
-        hand = current["hand"].copy()
-        replaced = []
-        
-        try:
-            for num in card_numbers:
-                idx = int(num) - 1
-                if 0 <= idx < current["hand_size"]:
-                    # Replace with random card from deck
-                    available = [c for c in current["cards"] if c not in hand]
-                    if available:
-                        hand[idx] = random.choice(available)
-                    else:
-                        hand[idx] = random.choice(current["cards"])
-                    replaced.append(int(num))
-            
-            current["hand"] = hand
-            save_data()
-            
-            replaced_list = ", ".join(map(str, sorted(replaced)))
-            
-            if mention:
-                response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']} (Admin replaced {replaced_list})\n"
-            else:
-                response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']} (replaced {replaced_list})\n"
-            
-            for i, card in enumerate(hand, 1):
-                response += f"{i}. {card}\n"
-            
-            await ctx.send(response)
-        except ValueError:
-            await ctx.send(f"Use numbers 1-{current['hand_size']}: `$x 1 3 5`")
-    
-    except Exception as e:
-        print(f"Error in x command: {e}")
-        await ctx.send(f"❌ Error in x command.")
-
-@bot.command()
-async def hand(ctx, member: Optional[discord.Member] = None):
-    """Show current hand: $hand or $hand @player"""
-    try:
-        target = member or ctx.author
-        
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can view other players' hands!")
-            return
-        
-        current = get_current_deck(target.id)
-        
-        if not current["hand"]:
-            await ctx.send(f"{target.display_name} hasn't drawn a hand yet!")
-            return
-        
-        response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']}\n"
-        for i, card in enumerate(current["hand"], 1):
-            response += f"{i}. {card}\n"
-        
-        await ctx.send(response)
-    
-    except Exception as e:
-        print(f"Error in hand command: {e}")
-        await ctx.send(f"❌ Error in hand command.")
-
-# ===== MP MANAGEMENT =====
-
-@bot.command()
-async def mp(ctx, operation: str, member: Optional[discord.Member] = None):
-    """Manage MP: $mp +2, $mp -3, $mp max, or $mp max @player (MP can go negative)"""
-    try:
-        target = member or ctx.author
-        
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can modify other players' MP!")
-            return
-        
-        current = get_current_deck(target.id)
-        
-        # Handle max reset
-        if operation.lower() == "max":
-            current["current_mp"] = current["max_mp"]
-            action = "reset to max"
-        elif operation.startswith("+") or operation.startswith("-"):
-            try:
-                change = int(operation)
-                current["current_mp"] += change
-                action = f"{operation} MP"
+                added_cards.append(f"#{card_num}")
             except ValueError:
-                await ctx.send("Use: `$mp +2`, `$mp -3`, or `$mp max`")
-                return
+                await message.channel.send(f"Invalid card number: '{part}'")
+        
+        if added_cards:
+            save_data()
+            # Show the updated active deck WITHOUT "Active Deck:" header
+            deck_display = format_active_deck(user["active_deck"])
+            await message.channel.send(f"Added: {', '.join(added_cards)}\n```\n{deck_display}```")
         else:
-            await ctx.send("Use: `$mp +2`, `$mp -3`, or `$mp max`")
+            await message.channel.send("No valid cards added.")
+        return
+
+    # DECK COMMAND - Show active deck
+    if content.startswith('$deck') or content.startswith('/deck'):
+        deck = user["active_deck"]
+        if not deck:
+            await message.channel.send("Your active deck is empty. Use `$use` or `$plus` to add cards.")
             return
+        
+        deck_display = format_active_deck(deck)
+        await message.channel.send(f"**Your Active Deck:**\n```\n{deck_display}```")
+        return
+
+    # PLUS COMMAND - Add card to active deck (even after draw)
+    if content.startswith('$plus') or content.startswith('/plus'):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Please specify which card to add. Example: `$plus 1`")
+            return
+        
+        added_cards = []
+        for part in parts[1:]:
+            try:
+                card_num = int(part)
+                if card_num not in card_library:
+                    await message.channel.send(f"Card #{card_num} not found in library.")
+                    continue
+                
+                # Check if user has the card in inventory
+                if str(card_num) not in user["inventory"] or user["inventory"][str(card_num)] <= 0:
+                    await message.channel.send(f"You don't have card #{card_num} in your inventory.")
+                    continue
+                
+                # Add to active deck
+                user["active_deck"].append(card_num)
+                
+                # Remove from inventory if limited mode
+                if user["deck_mode"] == "limited":
+                    user["inventory"][str(card_num)] -= 1
+                    if user["inventory"][str(card_num)] <= 0:
+                        del user["inventory"][str(card_num)]
+                
+                added_cards.append(f"#{card_num}")
+            except ValueError:
+                await message.channel.send(f"Invalid card number: '{part}'")
+        
+        if added_cards:
+            save_data()
+            deck_display = format_active_deck(user["active_deck"])
+            await message.channel.send(f"Added to active deck: {', '.join(added_cards)}\n```\n{deck_display}```")
+        else:
+            await message.channel.send("No valid cards added.")
+        return
+
+    # DRAW COMMAND
+    if content.startswith('$draw') or content.startswith('/draw'):
+        if not user["active_deck"]:
+            await message.channel.send("You have no cards in your active deck! Use `$use # # #` to add cards first.")
+            return
+        
+        # Draw 6 cards from active deck
+        drawn_cards = random.sample(user["active_deck"], min(6, len(user["active_deck"])))
+        
+        # If not enough cards, add more from inventory if available
+        while len(drawn_cards) < 6:
+            # Try to add more cards from inventory
+            available_cards = [int(k) for k, v in user["inventory"].items() if v > 0]
+            if available_cards:
+                new_card = random.choice(available_cards)
+                drawn_cards.append(new_card)
+                # Remove from active deck if limited mode
+                if user["deck_mode"] == "limited":
+                    user["inventory"][str(new_card)] -= 1
+                    if user["inventory"][str(new_card)] <= 0:
+                        del user["inventory"][str(new_card)]
+            else:
+                break
+        
+        # Ensure category balance
+        drawn_cards = ensure_category_balance(drawn_cards)
+        
+        # Store in hand
+        user["hand"] = drawn_cards
+        
+        # Clear active deck after draw
+        user["active_deck"] = []
         
         save_data()
         
-        # Show hand with updated MP
-        if current["hand"]:
-            response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']} ({action})\n"
-            for i, card in enumerate(current["hand"], 1):
-                response += f"{i}. {card}\n"
+        # Display the hand
+        hand_display = format_hand(drawn_cards)
+        await message.channel.send(f"**Your Drawn Cards:**\n```\n{hand_display}```")
+        return
+
+    # HAND COMMAND
+    if content.startswith('$hand') or content.startswith('/hand'):
+        if not user["hand"]:
+            await message.channel.send("You have no cards in hand. Use `$draw` to draw cards.")
+            return
+        
+        hand_display = format_hand(user["hand"])
+        await message.channel.send(f"**Your Current Hand:**\n```\n{hand_display}```")
+        return
+
+    # X COMMAND - Reroll cards
+    if content.startswith('$x') or content.startswith('/x'):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Please specify which cards to reroll. Example: `$x 1 3`")
+            return
+        
+        if not user["hand"]:
+            await message.channel.send("You have no cards in hand. Use `$draw` first.")
+            return
+        
+        # Get indices to reroll
+        indices = []
+        for part in parts[1:]:
+            try:
+                idx = int(part) - 1
+                if 0 <= idx < len(user["hand"]):
+                    indices.append(idx)
+                else:
+                    await message.channel.send(f"Card {idx+1} is not in your hand.")
+            except ValueError:
+                await message.channel.send(f"Invalid input: '{part}'. Please use numbers.")
+                return
+        
+        if not indices:
+            await message.channel.send("No valid cards to reroll.")
+            return
+        
+        # Calculate total MP cost for rerolling
+        total_mp_cost = 0
+        for idx in indices:
+            card_num = user["hand"][idx]
+            if card_num in card_library:
+                card = card_library[card_num]
+                if card["mp"] != "Variable":
+                    total_mp_cost += card["mp"]
+                else:
+                    # For variable cost cards, use a default of 2
+                    total_mp_cost += 2
+        
+        # Check if user has enough MP (can go negative but not above cap)
+        if user["mp"] < total_mp_cost and user["mp_cap"] > 0:
+            await message.channel.send(f"You don't have enough MP! You have {user['mp']} Mp, need {total_mp_cost} Mp.")
+            return
+        
+        # Deduct MP
+        user["mp"] -= total_mp_cost
+        
+        # Reroll selected cards
+        for idx in indices:
+            # Get card type of the one being replaced
+            old_card = user["hand"][idx]
+            old_type = card_library[old_card]["type"] if old_card in card_library else None
+            
+            # Find a new card of the same type
+            possible_cards = [num for num, card in card_library.items() 
+                            if card["type"] == old_type and num not in user["hand"]]
+            if possible_cards:
+                new_card = random.choice(possible_cards)
+                user["hand"][idx] = new_card
+        
+        # Ensure category balance
+        user["hand"] = ensure_category_balance(user["hand"])
+        
+        save_data()
+        
+        hand_display = format_hand(user["hand"])
+        await message.channel.send(f"**Rerolled Cards!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
+        return
+
+    # R COMMAND - Smart d20 roll
+    if content.startswith('$r') or content.startswith('/r'):
+        roll = smart_d20_roll(user_id)
+        streak_info = f"Bad streak: {int(user['bad_luck_streak'])} | Good streak: {int(user['good_luck_streak'])}"
+        
+        if roll <= 5:
+            await message.channel.send(f"🎲 You rolled a **{roll}**! (Critical fail!)\n{streak_info}")
+        elif roll <= 10:
+            await message.channel.send(f"🎲 You rolled a **{roll}**. (Not great)\n{streak_info}")
+        elif roll <= 15:
+            await message.channel.send(f"🎲 You rolled a **{roll}**. (Solid roll!)\n{streak_info}")
+        elif roll <= 19:
+            await message.channel.send(f"🎲 You rolled a **{roll}**! (Great roll!)\n{streak_info}")
         else:
-            response = f"**{target.display_name}'s {current['name']}** - MP: {current['current_mp']}/{current['max_mp']} ({action})\nNo hand drawn yet."
+            await message.channel.send(f"🎲 You rolled a **{roll}**! (Critical success!)\n{streak_info}")
         
-        await ctx.send(response)
-    
-    except Exception as e:
-        print(f"Error in mp command: {e}")
-        await ctx.send(f"❌ Error in mp command.")
+        save_data()
+        return
 
-# ===== SETTINGS =====
+    # MP TURN COMMAND
+    if content.startswith('$mp turn') or content.startswith('/mp turn'):
+        recovery = user["mp_recovery"]
+        user["mp"] += recovery
+        
+        # Check MP cap
+        if user["mp_cap"] > 0 and user["mp"] > user["mp_cap"]:
+            user["mp"] = user["mp_cap"]
+        
+        save_data()
+        await message.channel.send(f"Added {recovery} Mp! Current MP: {user['mp']} Mp")
+        return
 
-@bot.command()
-async def settings(ctx, setting: Optional[str] = None, value: Optional[str] = None, member: Optional[discord.Member] = None):
-    """View or change settings: $settings, $settings hand 8, $settings mp 15 @player"""
-    try:
-        # Just view settings
-        if setting is None:
-            current = get_current_deck(ctx.author.id)
-            response = f"**{ctx.author.display_name}'s {current['name']} Settings:**\n"
-            response += f"• Hand Size: {current['hand_size']}\n"
-            response += f"• Max MP: {current['max_mp']}\n"
-            response += f"• Current MP: {current['current_mp']}/{current['max_mp']}\n"
-            response += f"• Cards in Deck: {len(current['cards'])}\n"
-            if current["stats"]:
-                response += f"• Stats: {current['stats']}"
-            await ctx.send(response)
+    # SETTINGS COMMAND
+    if content.startswith('$settings') or content.startswith('/settings'):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Available settings:\n`$settings turn #` - Set MP recovery\n`$settings deck limited/limitless` - Set deck mode")
             return
         
-        # Changing settings
-        target = member or ctx.author
+        if parts[1] == "turn":
+            if len(parts) < 3:
+                await message.channel.send("Please specify a number. Example: `$settings turn 5`")
+                return
+            try:
+                new_recovery = int(parts[2])
+                user["mp_recovery"] = new_recovery
+                save_data()
+                await message.channel.send(f"MP recovery set to {new_recovery} Mp per turn.")
+            except ValueError:
+                await message.channel.send("Please provide a valid number.")
         
-        if member and not is_admin(ctx):
-            await ctx.send("❌ Only admins can change settings for other players!")
-            return
+        elif parts[1] == "deck":
+            if len(parts) < 3:
+                await message.channel.send("Please specify 'limited' or 'limitless'. Example: `$settings deck limited`")
+                return
+            mode = parts[2].lower()
+            if mode in ["limited", "limitless"]:
+                user["deck_mode"] = mode
+                save_data()
+                await message.channel.send(f"Deck mode set to: {mode}")
+            else:
+                await message.channel.send("Invalid mode. Choose 'limited' or 'limitless'.")
+        return
+
+    # RESET ALL COMMAND
+    if content.startswith('$reset all') or content.startswith('/reset all'):
+        # Ask for confirmation
+        await message.channel.send("⚠️ **WARNING**: This will reset ALL data for EVERYONE! Type `$confirm reset` to confirm.")
         
-        if value is None:
-            await ctx.send(f"Specify a value: `$settings {setting} 8`")
-            return
-        
-        current = get_current_deck(target.id)
+        def check(m):
+            return m.author == message.author and m.channel == message.channel
         
         try:
-            if setting.lower() == "hand":
-                new_value = int(value)
-                if new_value < 1 or new_value > 20:
-                    await ctx.send("Hand size must be between 1 and 20!")
-                    return
-                current["hand_size"] = new_value
+            msg = await client.wait_for('message', timeout=30.0, check=check)
+            if msg.content.lower() == '$confirm reset':
+                user_data.clear()
                 save_data()
-                await ctx.send(f"✅ Set {target.display_name}'s hand size to {new_value}")
-                
-            elif setting.lower() == "mp":
-                new_value = int(value)
-                if new_value < 1 or new_value > 100:
-                    await ctx.send("Max MP must be between 1 and 100!")
-                    return
-                current["max_mp"] = new_value
-                current["current_mp"] = new_value
-                save_data()
-                await ctx.send(f"✅ Set {target.display_name}'s max MP to {new_value}")
-                
+                await message.channel.send("✅ All data has been reset!")
             else:
-                await ctx.send("Invalid setting! Use `hand` or `mp`")
-                
-        except ValueError:
-            await ctx.send("Value must be a number!")
-    
-    except Exception as e:
-        print(f"Error in settings command: {e}")
-        await ctx.send(f"❌ Error in settings command.")
+                await message.channel.send("Reset cancelled.")
+        except TimeoutError:
+            await message.channel.send("Reset cancelled (timeout).")
+        return
 
-# ===== STATS =====
-
-@bot.command()
-async def stats(ctx, *, text: Optional[str] = None):
-    """View or set stats: $stats, $stats My arena stats, or $stats New stats @player"""
-    try:
-        if text is None:
-            # View stats
-            current = get_current_deck(ctx.author.id)
-            if current["stats"]:
-                await ctx.send(f"**{ctx.author.display_name}'s {current['name']} Stats:**\n{current['stats']}")
-            else:
-                await ctx.send(f"No stats set for {ctx.author.display_name}'s {current['name']}. Use `$stats your text here` to set them.")
+    # NUM COMMAND - Modify card quantities
+    if content.startswith('$num') or content.startswith('/num'):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Usage: `$num # +/-#` or `$num random #/all`")
             return
         
-        parts = text.strip().split()
-        mention, stat_parts = parse_mention_at_end(parts)
-        
-        if mention:
-            # Admin setting stats for someone
-            if not is_admin(ctx):
-                await ctx.send("❌ Only admins can set stats for other players!")
+        if parts[1] == "random":
+            if len(parts) < 3:
+                await message.channel.send("Usage: `$num random #` or `$num random all`")
                 return
             
+            if parts[2] == "all":
+                # Randomize all cards in inventory
+                for card_num in user["inventory"]:
+                    user["inventory"][card_num] = random.randint(1, 10)
+                save_data()
+                await message.channel.send("All card quantities randomized!")
+                return
+            else:
+                try:
+                    card_num = int(parts[2])
+                    if str(card_num) not in user["inventory"]:
+                        await message.channel.send(f"You don't have card #{card_num} in your inventory.")
+                        return
+                    user["inventory"][str(card_num)] = random.randint(1, 10)
+                    save_data()
+                    await message.channel.send(f"Card #{card_num} quantity randomized!")
+                except ValueError:
+                    await message.channel.send("Please provide a valid card number.")
+                return
+        
+        elif len(parts) == 3:
             try:
-                member = await commands.MemberConverter().convert(ctx, mention)
-            except:
-                await ctx.send("Invalid user mention!")
-                return
-            
-            stat_text = " ".join(stat_parts)
-            if not stat_text:
-                await ctx.send("Please provide stats text!")
-                return
-            
-            current = get_current_deck(member.id)
-            current["stats"] = stat_text
-            save_data()
-            await ctx.send(f"✅ Set stats for {member.display_name}'s {current['name']}")
-        
+                card_num = int(parts[1])
+                change = int(parts[2])
+                
+                if str(card_num) not in user["inventory"]:
+                    await message.channel.send(f"You don't have card #{card_num} in your inventory.")
+                    return
+                
+                user["inventory"][str(card_num)] += change
+                
+                if user["inventory"][str(card_num)] <= 0:
+                    del user["inventory"][str(card_num)]
+                    await message.channel.send(f"Card #{card_num} removed from inventory.")
+                else:
+                    await message.channel.send(f"Card #{card_num} quantity is now {user['inventory'][str(card_num)]}")
+                
+                save_data()
+            except ValueError:
+                await message.channel.send("Please provide valid numbers.")
         else:
-            # Setting own stats
-            if not text:
-                await ctx.send("Please provide stats text!")
-                return
-            
-            current = get_current_deck(ctx.author.id)
-            current["stats"] = text
-            save_data()
-            await ctx.send(f"✅ Set stats for your {current['name']}")
-    
-    except Exception as e:
-        print(f"Error in stats command: {e}")
-        await ctx.send(f"❌ Error in stats command.")
+            await message.channel.send("Usage: `$num # +/-#` or `$num random #/all`")
+        return
 
-# ===== ROLL =====
-
-@bot.command()
-async def r(ctx):
-    """Roll d20: $r"""
-    try:
-        roll = random.randint(1, 20)
-        if roll == 1:
-            response = f'🎲 Rolled **{roll}** - Critical fail!'
-        elif roll == 20:
-            response = f'🎲 Rolled **{roll}** - NATURAL 20! 🎉'
-        elif roll < 10:
-            response = f'🎲 Rolled **{roll}** - get fucked lmao!'
+    # Keep existing functionality
+    if content.startswith('roll d20'):
+        roll_result = random.randint(1, 20)
+        if roll_result < 2:
+            await message.channel.send(f'You rolled a d20 and got {roll_result} dm, kill this mf.')
+        elif roll_result < 10:
+            await message.channel.send(f'You rolled a d20 and got {roll_result} get fucked lmao!')
+        elif roll_result < 20:
+            await message.channel.send(f'You rolled a d20 and got {roll_result} not bad!')
         else:
-            response = f'🎲 Rolled **{roll}** - not bad!'
-        await ctx.send(response)
-    except Exception as e:
-        await ctx.send(f"❌ Error: {e}")
+            await message.channel.send(f'You rolled a d20 and got {roll_result} sheeeesh')
 
-# ===== HELP =====
+    if ":sob:" in message.content:
+        await message.channel.send("L")
 
-@bot.command()
-async def helpme(ctx):
-    """Show all commands"""
-    help_text = f"""
-**🎴 MYTHOS BOT - COMPLETE COMMANDS 🎴**
-
-**DECK MANAGEMENT:**
-`$cards` - Show your current deck
-`$cards @player` - Show another player's deck (admin)
-`$add [card]` - Add card(s) to your deck (one per line)
-`$add [card] @player` - Add to player's deck (admin)
-`$remove 1 3 5` - Remove multiple cards
-`$remove 1 3 @player` - Remove from player's deck (admin)
-`$clear` - Clear your current deck
-`$clear @player` - Clear player's deck (admin)
-`$default` - Reset to base 12 cards
-`$default @player` - Reset player's deck (admin)
-
-**DECK SWITCHING:**
-`$deck 2` - Switch to deck 2
-`$deck 3 @player` - Switch player's deck (admin)
-`$deck reset` - Reset current deck to defaults
-`$deck reset @player` - Reset player's deck (admin)
-`$decks` - Show all decks with preview
-`$decks @player` - Show player's decks (admin)
-`$name My Deck` - Name your current deck
-`$name Arena @player` - Name player's deck (admin)
-
-**GAME PLAY:**
-`$draw` - Draw a hand
-`$draw @player` - Draw for player (admin)
-`$hand` - Show your current hand
-`$hand @player` - Show player's hand
-`$x 1 3 5` - Replace cards in hand
-`$x 1 3 5 @player` - Replace player's cards (admin)
-
-**MP SYSTEM:**
-`$mp +2` - Add MP (can go negative)
-`$mp -3` - Subtract MP (can go negative)
-`$mp max` - Reset to max MP
-`$mp max @player` - Reset player's MP (admin)
-
-**SETTINGS:**
-`$settings` - View current settings
-`$settings hand 8` - Set hand size
-`$settings hand 8 @player` - Set player's hand size (admin)
-`$settings mp 15` - Set max MP
-`$settings mp 15 @player` - Set player's max MP (admin)
-
-**STATS:**
-`$stats` - View stats
-`$stats My arena stats` - Set your stats
-`$stats New stats @player` - Set player's stats (admin)
-
-**OTHER:**
-`$r` - Roll d20
-`$helpme` - This message
-
-**DEFAULTS:**
-• 5 decks per player (Deck 1 has base cards, others empty)
-• Hand size: 6 | Max MP: 10 (can go negative)
-• Base deck: {len(BASE_DECK)} cards
-• Data auto-saves to file
-
-**BULK ADD EXAMPLE:**
-$add
-Fire - 3 Mp
-Wind - 3 Mp
-Water - 3 Mp
-Earth - 3 Mp
-"""
-    await ctx.send(help_text)
-
-# ===== RUN BOT =====
-
-TOKEN = os.environ.get("DISCORD_TOKEN")
-if not TOKEN:
-    print("❌ ERROR: Set DISCORD_TOKEN environment variable!")
-    print("In Railway: Variables → Add DISCORD_TOKEN")
-else:
-    try:
-        bot.run(TOKEN)
-    except Exception as e:
-        print(f"❌ Failed to start bot: {e}")
+# Run the bot
+try:
+    token = os.getenv("DISCORD_BOT_TOKEN") or "YOUR_BOT_TOKEN_HERE"
+    if token == "YOUR_BOT_TOKEN_HERE":
+        print("ERROR: Please set your Discord bot token!")
+        print("1. Go to Discord Developer Portal")
+        print("2. Get your bot token")
+        print("3. Set it as environment variable DISCORD_BOT_TOKEN")
+        print("4. NEVER commit real tokens to GitHub!")
+    else:
+        client.run(token)
+except discord.HTTPException as e:
+    if e.status == 429:
+        print("The Discord servers denied the connection for making too many requests")
+        print("Get help from https://stackoverflow.com/questions/66724687/in-discord-py-how-to-solve-the-error-for-toomanyrequests")
+    else:
+        raise e
