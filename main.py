@@ -2,6 +2,7 @@ import os
 import discord
 import random
 import json
+import sys
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -63,18 +64,6 @@ card_library = {
 }
 
 # Data structure for each user
-# {
-#   "mp": 0,
-#   "mp_recovery": 4,
-#   "mp_cap": 0,
-#   "inventory": {},  # card_number: quantity
-#   "active_deck": [],  # list of card numbers
-#   "deck_mode": "limitless",  # or "limited"
-#   "hand": [],  # 6 cards currently in hand
-#   "bad_luck_streak": 0,
-#   "good_luck_streak": 0
-# }
-
 user_data = {}
 
 # File to save data
@@ -204,8 +193,8 @@ def smart_d20_roll(user_id):
         user["good_luck_streak"] = max(0, user["good_luck_streak"] - 0.5)
     
     # Cap streaks
-    user["bad_luck_streak"] = min(10, user["bad_luck_streak"])
-    user["good_luck_streak"] = min(10, user["good_luck_streak"])
+    user["bad_luck_streak"] = min(10, int(user["bad_luck_streak"]))
+    user["good_luck_streak"] = min(10, int(user["good_luck_streak"]))
     
     save_data()
     return roll
@@ -263,6 +252,8 @@ def ensure_category_balance(hand):
 async def on_ready():
     load_data()
     print(f'We have logged in as {client.user}')
+    print(f'Bot is in {len(client.guilds)} guilds')
+    print('Bot is ready!')
 
 @client.event
 async def on_message(message):
@@ -274,7 +265,7 @@ async def on_message(message):
     user = get_user(user_id)
     
     # HELP COMMAND
-    if content.startswith('$help') or content.startswith('/help'):
+    if content.startswith('$help'):
         help_text = """
 **Available Commands:**
 `$library all/element/shape/command` - View cards by category
@@ -299,7 +290,7 @@ async def on_message(message):
         return
 
     # LIBRARY COMMAND
-    if content.startswith('$library') or content.startswith('/library'):
+    if content.startswith('$library'):
         parts = content.split()
         category = parts[1] if len(parts) > 1 else "all"
         
@@ -326,7 +317,7 @@ async def on_message(message):
         return
 
     # INFO COMMAND
-    if content.startswith('$info') or content.startswith('/info'):
+    if content.startswith('$info'):
         parts = content.split()
         if len(parts) < 2:
             await message.channel.send("Please specify a card number. Example: `$info 1`")
@@ -351,7 +342,7 @@ Info: {card['info']}
         return
 
     # ADD COMMAND - Two line format
-    if content.startswith('$add') or content.startswith('/add'):
+    if content.startswith('$add'):
         # Wait for the next message with the numbers
         await message.channel.send("Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
         
@@ -403,7 +394,7 @@ Info: {card['info']}
         return
 
     # CARDS COMMAND (Inventory)
-    if content.startswith('$cards') or content.startswith('/cards'):
+    if content.startswith('$cards'):
         inventory = user["inventory"]
         if not inventory:
             await message.channel.send("Your inventory is empty. Use `$add` to add cards.")
@@ -423,7 +414,7 @@ Info: {card['info']}
         return
 
     # USE COMMAND - Add cards to active deck
-    if content.startswith('$use') or content.startswith('/use'):
+    if content.startswith('$use'):
         parts = content.split()
         if len(parts) < 2:
             await message.channel.send("Please specify which cards to use. Example: `$use 1 2 3`")
@@ -458,7 +449,7 @@ Info: {card['info']}
         
         if added_cards:
             save_data()
-            # Show the updated active deck WITHOUT "Active Deck:" header
+            # Show the updated active deck
             deck_display = format_active_deck(user["active_deck"])
             await message.channel.send(f"Added: {', '.join(added_cards)}\n```\n{deck_display}```")
         else:
@@ -466,7 +457,7 @@ Info: {card['info']}
         return
 
     # DECK COMMAND - Show active deck
-    if content.startswith('$deck') or content.startswith('/deck'):
+    if content.startswith('$deck'):
         deck = user["active_deck"]
         if not deck:
             await message.channel.send("Your active deck is empty. Use `$use` or `$plus` to add cards.")
@@ -477,7 +468,7 @@ Info: {card['info']}
         return
 
     # PLUS COMMAND - Add card to active deck (even after draw)
-    if content.startswith('$plus') or content.startswith('/plus'):
+    if content.startswith('$plus'):
         parts = content.split()
         if len(parts) < 2:
             await message.channel.send("Please specify which card to add. Example: `$plus 1`")
@@ -518,7 +509,7 @@ Info: {card['info']}
         return
 
     # DRAW COMMAND
-    if content.startswith('$draw') or content.startswith('/draw'):
+    if content.startswith('$draw'):
         if not user["active_deck"]:
             await message.channel.send("You have no cards in your active deck! Use `$use # # #` to add cards first.")
             return
@@ -558,7 +549,7 @@ Info: {card['info']}
         return
 
     # HAND COMMAND
-    if content.startswith('$hand') or content.startswith('/hand'):
+    if content.startswith('$hand'):
         if not user["hand"]:
             await message.channel.send("You have no cards in hand. Use `$draw` to draw cards.")
             return
@@ -568,7 +559,7 @@ Info: {card['info']}
         return
 
     # X COMMAND - Reroll cards
-    if content.startswith('$x') or content.startswith('/x'):
+    if content.startswith('$x'):
         parts = content.split()
         if len(parts) < 2:
             await message.channel.send("Please specify which cards to reroll. Example: `$x 1 3`")
@@ -638,7 +629,7 @@ Info: {card['info']}
         return
 
     # R COMMAND - Smart d20 roll
-    if content.startswith('$r') or content.startswith('/r'):
+    if content.startswith('$r'):
         roll = smart_d20_roll(user_id)
         streak_info = f"Bad streak: {int(user['bad_luck_streak'])} | Good streak: {int(user['good_luck_streak'])}"
         
@@ -657,7 +648,7 @@ Info: {card['info']}
         return
 
     # MP TURN COMMAND
-    if content.startswith('$mp turn') or content.startswith('/mp turn'):
+    if content.startswith('$mp turn'):
         recovery = user["mp_recovery"]
         user["mp"] += recovery
         
@@ -670,7 +661,7 @@ Info: {card['info']}
         return
 
     # SETTINGS COMMAND
-    if content.startswith('$settings') or content.startswith('/settings'):
+    if content.startswith('$settings'):
         parts = content.split()
         if len(parts) < 2:
             await message.channel.send("Available settings:\n`$settings turn #` - Set MP recovery\n`$settings deck limited/limitless` - Set deck mode")
@@ -702,7 +693,7 @@ Info: {card['info']}
         return
 
     # RESET ALL COMMAND
-    if content.startswith('$reset all') or content.startswith('/reset all'):
+    if content.startswith('$reset all'):
         # Ask for confirmation
         await message.channel.send("⚠️ **WARNING**: This will reset ALL data for EVERYONE! Type `$confirm reset` to confirm.")
         
@@ -713,99 +704,3 @@ Info: {card['info']}
             msg = await client.wait_for('message', timeout=30.0, check=check)
             if msg.content.lower() == '$confirm reset':
                 user_data.clear()
-                save_data()
-                await message.channel.send("✅ All data has been reset!")
-            else:
-                await message.channel.send("Reset cancelled.")
-        except TimeoutError:
-            await message.channel.send("Reset cancelled (timeout).")
-        return
-
-    # NUM COMMAND - Modify card quantities
-    if content.startswith('$num') or content.startswith('/num'):
-        parts = content.split()
-        if len(parts) < 2:
-            await message.channel.send("Usage: `$num # +/-#` or `$num random #/all`")
-            return
-        
-        if parts[1] == "random":
-            if len(parts) < 3:
-                await message.channel.send("Usage: `$num random #` or `$num random all`")
-                return
-            
-            if parts[2] == "all":
-                # Randomize all cards in inventory
-                for card_num in user["inventory"]:
-                    user["inventory"][card_num] = random.randint(1, 10)
-                save_data()
-                await message.channel.send("All card quantities randomized!")
-                return
-            else:
-                try:
-                    card_num = int(parts[2])
-                    if str(card_num) not in user["inventory"]:
-                        await message.channel.send(f"You don't have card #{card_num} in your inventory.")
-                        return
-                    user["inventory"][str(card_num)] = random.randint(1, 10)
-                    save_data()
-                    await message.channel.send(f"Card #{card_num} quantity randomized!")
-                except ValueError:
-                    await message.channel.send("Please provide a valid card number.")
-                return
-        
-        elif len(parts) == 3:
-            try:
-                card_num = int(parts[1])
-                change = int(parts[2])
-                
-                if str(card_num) not in user["inventory"]:
-                    await message.channel.send(f"You don't have card #{card_num} in your inventory.")
-                    return
-                
-                user["inventory"][str(card_num)] += change
-                
-                if user["inventory"][str(card_num)] <= 0:
-                    del user["inventory"][str(card_num)]
-                    await message.channel.send(f"Card #{card_num} removed from inventory.")
-                else:
-                    await message.channel.send(f"Card #{card_num} quantity is now {user['inventory'][str(card_num)]}")
-                
-                save_data()
-            except ValueError:
-                await message.channel.send("Please provide valid numbers.")
-        else:
-            await message.channel.send("Usage: `$num # +/-#` or `$num random #/all`")
-        return
-
-    # Keep existing functionality
-    if content.startswith('roll d20'):
-        roll_result = random.randint(1, 20)
-        if roll_result < 2:
-            await message.channel.send(f'You rolled a d20 and got {roll_result} dm, kill this mf.')
-        elif roll_result < 10:
-            await message.channel.send(f'You rolled a d20 and got {roll_result} get fucked lmao!')
-        elif roll_result < 20:
-            await message.channel.send(f'You rolled a d20 and got {roll_result} not bad!')
-        else:
-            await message.channel.send(f'You rolled a d20 and got {roll_result} sheeeesh')
-
-    if ":sob:" in message.content:
-        await message.channel.send("L")
-
-# Run the bot
-try:
-    token = os.getenv("DISCORD_BOT_TOKEN") or "YOUR_BOT_TOKEN_HERE"
-    if token == "YOUR_BOT_TOKEN_HERE":
-        print("ERROR: Please set your Discord bot token!")
-        print("1. Go to Discord Developer Portal")
-        print("2. Get your bot token")
-        print("3. Set it as environment variable DISCORD_BOT_TOKEN")
-        print("4. NEVER commit real tokens to GitHub!")
-    else:
-        client.run(token)
-except discord.HTTPException as e:
-    if e.status == 429:
-        print("The Discord servers denied the connection for making too many requests")
-        print("Get help from https://stackoverflow.com/questions/66724687/in-discord-py-how-to-solve-the-error-for-toomanyrequests")
-    else:
-        raise e
