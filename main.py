@@ -129,76 +129,6 @@ def format_active_deck(deck):
         result += f"{i}. {format_card(card_num)}\n"
     return result
 
-def format_inventory(inventory):
-    if not inventory:
-        return "Empty"
-    result = ""
-    for card_num, quantity in inventory.items():
-        card_num = int(card_num)
-        if card_num in card_library:
-            card = card_library[card_num]
-            result += f"{card_num}. {card['name']} - {quantity}x\n"
-    return result
-
-def smart_d20_roll(user_id):
-    user = get_user(user_id)
-    bad_streak = user["bad_luck_streak"]
-    good_streak = user["good_luck_streak"]
-    
-    # Base roll
-    roll = random.randint(1, 20)
-    
-    # Apply bad luck streak modifier (makes low rolls rarer)
-    if bad_streak > 0 and roll <= 5:
-        # Reduced chance of low rolls
-        if bad_streak >= 5:
-            reduction = 0.8
-        else:
-            reduction = bad_streak * 0.15  # 15% per streak up to 75%
-        
-        # Try to reroll if we hit a low number
-        if random.random() < reduction:
-            # Reroll with higher numbers weighted
-            roll = random.randint(5 + bad_streak, 20)
-    
-    # Apply good luck streak modifier (makes high rolls rarer after too many good rolls)
-    if good_streak > 0:
-        # After 2 good rolls, start making bad rolls more likely
-        if good_streak >= 2:
-            # Calculate bonus chance for bad rolls
-            bad_bonus = 0.1  # 10% base
-            
-            # If roll was high, increase the bonus
-            if roll >= 10:
-                bad_bonus *= 1.5
-            if roll >= 15:
-                bad_bonus *= 2.0
-            
-            # Chance to reduce the roll
-            if random.random() < bad_bonus:
-                # Reduce the roll by a random amount
-                reduction_amount = random.randint(1, min(10, good_streak * 2))
-                roll = max(1, roll - reduction_amount)
-    
-    # Update streaks based on roll
-    if roll <= 5:
-        user["bad_luck_streak"] += 1
-        user["good_luck_streak"] = max(0, user["good_luck_streak"] - 1)
-    elif roll >= 16:
-        user["good_luck_streak"] += 1
-        user["bad_luck_streak"] = max(0, user["bad_luck_streak"] - 1)
-    else:
-        # Middle rolls gradually reduce streaks
-        user["bad_luck_streak"] = max(0, user["bad_luck_streak"] - 0.5)
-        user["good_luck_streak"] = max(0, user["good_luck_streak"] - 0.5)
-    
-    # Cap streaks
-    user["bad_luck_streak"] = min(10, int(user["bad_luck_streak"]))
-    user["good_luck_streak"] = min(10, int(user["good_luck_streak"]))
-    
-    save_data()
-    return roll
-
 def ensure_category_balance(hand):
     """Ensure hand has at least one of each category (Element, Shape, Command)"""
     categories = {"Element": 0, "Shape": 0, "Command": 0}
@@ -283,7 +213,7 @@ async def on_message(message):
 `$settings deck # limited/limitless` - Set deck mode
 `$reset all` - Full reset for everyone
 `$x #` - Reroll cards (with category protection)
-`$r` - Roll d20 with smart RNG
+`$r` - Roll d20
 `$hand` - Show current hand
         """
         await message.channel.send(help_text)
@@ -313,7 +243,7 @@ async def on_message(message):
                     else:
                         result += f"{num}. {card['name']} - {card['mp']} Mp ({card['type']})\n"
         
-        await message.channel.send(result[:2000])  # Discord message limit
+        await message.channel.send(result[:2000])
         return
 
     # INFO COMMAND
@@ -343,14 +273,12 @@ Info: {card['info']}
 
     # ADD COMMAND - Two line format
     if content.startswith('$add'):
-        # Wait for the next message with the numbers
         await message.channel.send("Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
         
         def check(m):
             return m.author == message.author and m.channel == message.channel
         
         try:
-            # Get the next message
             msg = await client.wait_for('message', timeout=60.0, check=check)
             lines = msg.content.strip().split('\n')
             
@@ -366,15 +294,11 @@ Info: {card['info']}
                             await message.channel.send(f"Card #{card_num} not found in library.")
                             continue
                         
-                        # Add to inventory
                         if user["deck_mode"] == "limited":
-                            # In limited mode, each card starts with 5
                             if str(card_num) not in user["inventory"]:
                                 user["inventory"][str(card_num)] = 5
-                            # Add the specified quantity
                             user["inventory"][str(card_num)] += quantity
                         else:
-                            # In limitless mode, add the quantity (or unlimited)
                             if str(card_num) not in user["inventory"]:
                                 user["inventory"][str(card_num)] = 0
                             user["inventory"][str(card_num)] += quantity
@@ -428,20 +352,16 @@ Info: {card['info']}
                     await message.channel.send(f"Card #{card_num} not found in library.")
                     continue
                 
-                # Check if user has the card in inventory
                 if str(card_num) not in user["inventory"] or user["inventory"][str(card_num)] <= 0:
                     await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                     continue
                 
-                # Add to active deck
                 user["active_deck"].append(card_num)
                 
-                # Remove from inventory if limited mode
                 if user["deck_mode"] == "limited":
                     user["inventory"][str(card_num)] -= 1
                     if user["inventory"][str(card_num)] <= 0:
                         del user["inventory"][str(card_num)]
-                # In limitless mode, keep in inventory
                 
                 added_cards.append(f"#{card_num}")
             except ValueError:
@@ -449,7 +369,6 @@ Info: {card['info']}
         
         if added_cards:
             save_data()
-            # Show the updated active deck
             deck_display = format_active_deck(user["active_deck"])
             await message.channel.send(f"Added: {', '.join(added_cards)}\n```\n{deck_display}```")
         else:
@@ -467,7 +386,7 @@ Info: {card['info']}
         await message.channel.send(f"**Your Active Deck:**\n```\n{deck_display}```")
         return
 
-    # PLUS COMMAND - Add card to active deck (even after draw)
+    # PLUS COMMAND - Add card to active deck
     if content.startswith('$plus'):
         parts = content.split()
         if len(parts) < 2:
@@ -482,15 +401,12 @@ Info: {card['info']}
                     await message.channel.send(f"Card #{card_num} not found in library.")
                     continue
                 
-                # Check if user has the card in inventory
                 if str(card_num) not in user["inventory"] or user["inventory"][str(card_num)] <= 0:
                     await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                     continue
                 
-                # Add to active deck
                 user["active_deck"].append(card_num)
                 
-                # Remove from inventory if limited mode
                 if user["deck_mode"] == "limited":
                     user["inventory"][str(card_num)] -= 1
                     if user["inventory"][str(card_num)] <= 0:
@@ -514,17 +430,13 @@ Info: {card['info']}
             await message.channel.send("You have no cards in your active deck! Use `$use # # #` to add cards first.")
             return
         
-        # Draw 6 cards from active deck
         drawn_cards = random.sample(user["active_deck"], min(6, len(user["active_deck"])))
         
-        # If not enough cards, add more from inventory if available
         while len(drawn_cards) < 6:
-            # Try to add more cards from inventory
             available_cards = [int(k) for k, v in user["inventory"].items() if v > 0]
             if available_cards:
                 new_card = random.choice(available_cards)
                 drawn_cards.append(new_card)
-                # Remove from active deck if limited mode
                 if user["deck_mode"] == "limited":
                     user["inventory"][str(new_card)] -= 1
                     if user["inventory"][str(new_card)] <= 0:
@@ -532,18 +444,12 @@ Info: {card['info']}
             else:
                 break
         
-        # Ensure category balance
         drawn_cards = ensure_category_balance(drawn_cards)
-        
-        # Store in hand
         user["hand"] = drawn_cards
-        
-        # Clear active deck after draw
         user["active_deck"] = []
         
         save_data()
         
-        # Display the hand
         hand_display = format_hand(drawn_cards)
         await message.channel.send(f"**Your Drawn Cards:**\n```\n{hand_display}```")
         return
@@ -569,7 +475,6 @@ Info: {card['info']}
             await message.channel.send("You have no cards in hand. Use `$draw` first.")
             return
         
-        # Get indices to reroll
         indices = []
         for part in parts[1:]:
             try:
@@ -586,7 +491,6 @@ Info: {card['info']}
             await message.channel.send("No valid cards to reroll.")
             return
         
-        # Calculate total MP cost for rerolling
         total_mp_cost = 0
         for idx in indices:
             card_num = user["hand"][idx]
@@ -595,31 +499,24 @@ Info: {card['info']}
                 if card["mp"] != "Variable":
                     total_mp_cost += card["mp"]
                 else:
-                    # For variable cost cards, use a default of 2
                     total_mp_cost += 2
         
-        # Check if user has enough MP (can go negative but not above cap)
         if user["mp"] < total_mp_cost and user["mp_cap"] > 0:
             await message.channel.send(f"You don't have enough MP! You have {user['mp']} Mp, need {total_mp_cost} Mp.")
             return
         
-        # Deduct MP
         user["mp"] -= total_mp_cost
         
-        # Reroll selected cards
         for idx in indices:
-            # Get card type of the one being replaced
             old_card = user["hand"][idx]
             old_type = card_library[old_card]["type"] if old_card in card_library else None
             
-            # Find a new card of the same type
             possible_cards = [num for num, card in card_library.items() 
                             if card["type"] == old_type and num not in user["hand"]]
             if possible_cards:
                 new_card = random.choice(possible_cards)
                 user["hand"][idx] = new_card
         
-        # Ensure category balance
         user["hand"] = ensure_category_balance(user["hand"])
         
         save_data()
@@ -628,23 +525,18 @@ Info: {card['info']}
         await message.channel.send(f"**Rerolled Cards!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
         return
 
-    # R COMMAND - Smart d20 roll
+    # R COMMAND - Simple d20 roll
     if content.startswith('$r'):
-        roll = smart_d20_roll(user_id)
-        streak_info = f"Bad streak: {int(user['bad_luck_streak'])} | Good streak: {int(user['good_luck_streak'])}"
+        roll_result = random.randint(1, 20)
         
-        if roll <= 5:
-            await message.channel.send(f"🎲 You rolled a **{roll}**! (Critical fail!)\n{streak_info}")
-        elif roll <= 10:
-            await message.channel.send(f"🎲 You rolled a **{roll}**. (Not great)\n{streak_info}")
-        elif roll <= 15:
-            await message.channel.send(f"🎲 You rolled a **{roll}**. (Solid roll!)\n{streak_info}")
-        elif roll <= 19:
-            await message.channel.send(f"🎲 You rolled a **{roll}**! (Great roll!)\n{streak_info}")
+        if roll_result < 2:
+            await message.channel.send(f'🎲 You rolled a d20 and got {roll_result} dm, kill this mf.')
+        elif roll_result < 10:
+            await message.channel.send(f'🎲 You rolled a d20 and got {roll_result} get fucked lmao!')
+        elif roll_result < 20:
+            await message.channel.send(f'🎲 You rolled a d20 and got {roll_result} not bad!')
         else:
-            await message.channel.send(f"🎲 You rolled a **{roll}**! (Critical success!)\n{streak_info}")
-        
-        save_data()
+            await message.channel.send(f'🎲 You rolled a d20 and got {roll_result} sheeeesh')
         return
 
     # MP TURN COMMAND
@@ -652,7 +544,6 @@ Info: {card['info']}
         recovery = user["mp_recovery"]
         user["mp"] += recovery
         
-        # Check MP cap
         if user["mp_cap"] > 0 and user["mp"] > user["mp_cap"]:
             user["mp"] = user["mp_cap"]
         
@@ -694,7 +585,6 @@ Info: {card['info']}
 
     # RESET ALL COMMAND
     if content.startswith('$reset all'):
-        # Ask for confirmation
         await message.channel.send("⚠️ **WARNING**: This will reset ALL data for EVERYONE! Type `$confirm reset` to confirm.")
         
         def check(m):
@@ -725,7 +615,6 @@ Info: {card['info']}
                 return
             
             if parts[2] == "all":
-                # Randomize all cards in inventory
                 for card_num in user["inventory"]:
                     user["inventory"][card_num] = random.randint(1, 10)
                 save_data()
@@ -783,8 +672,7 @@ Info: {card['info']}
     if ":sob:" in message.content:
         await message.channel.send("L")
 
-# Run the bot
-# Run the bot
+# Run the bot with the updated token handling
 if __name__ == "__main__":
     try:
         # Try multiple ways to get the token
@@ -825,33 +713,4 @@ if __name__ == "__main__":
             print("4. Add a new variable:")
             print("   Key: DISCORD_BOT_TOKEN")
             print("   Value: [your bot token]")
-            print("5. Click 'Deploy' to restart with the new variable")
-            print("="*50)
-        else:
-            print("Attempting to connect to Discord...")
-            client.run(token)
-            
-    except discord.LoginFailure as e:
-        print("="*50)
-        print("LOGIN FAILED!")
-        print("="*50)
-        print(f"Error: {e}")
-        print("Your token is invalid or expired.")
-        print("1. Go to https://discord.com/developers/applications")
-        print("2. Select your application")
-        print("3. Go to 'Bot' section")
-        print("4. Click 'Reset Token'")
-        print("5. Copy the new token")
-        print("6. Update your Railway environment variable")
-        print("7. Deploy again")
-        print("="*50)
-    except discord.HTTPException as e:
-        if e.status == 429:
-            print("Rate limited - too many requests. Waiting a few minutes...")
-        else:
-            print(f"HTTP Exception: {e}")
-            raise e
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+            print
