@@ -704,3 +704,114 @@ Info: {card['info']}
             msg = await client.wait_for('message', timeout=30.0, check=check)
             if msg.content.lower() == '$confirm reset':
                 user_data.clear()
+                save_data()
+                await message.channel.send("✅ All data has been reset!")
+            else:
+                await message.channel.send("Reset cancelled.")
+        except TimeoutError:
+            await message.channel.send("Reset cancelled (timeout).")
+        return
+
+    # NUM COMMAND - Modify card quantities
+    if content.startswith('$num'):
+        parts = content.split()
+        if len(parts) < 2:
+            await message.channel.send("Usage: `$num # +/-#` or `$num random #/all`")
+            return
+        
+        if parts[1] == "random":
+            if len(parts) < 3:
+                await message.channel.send("Usage: `$num random #` or `$num random all`")
+                return
+            
+            if parts[2] == "all":
+                # Randomize all cards in inventory
+                for card_num in user["inventory"]:
+                    user["inventory"][card_num] = random.randint(1, 10)
+                save_data()
+                await message.channel.send("All card quantities randomized!")
+                return
+            else:
+                try:
+                    card_num = int(parts[2])
+                    if str(card_num) not in user["inventory"]:
+                        await message.channel.send(f"You don't have card #{card_num} in your inventory.")
+                        return
+                    user["inventory"][str(card_num)] = random.randint(1, 10)
+                    save_data()
+                    await message.channel.send(f"Card #{card_num} quantity randomized!")
+                except ValueError:
+                    await message.channel.send("Please provide a valid card number.")
+                return
+        
+        elif len(parts) == 3:
+            try:
+                card_num = int(parts[1])
+                change = int(parts[2])
+                
+                if str(card_num) not in user["inventory"]:
+                    await message.channel.send(f"You don't have card #{card_num} in your inventory.")
+                    return
+                
+                user["inventory"][str(card_num)] += change
+                
+                if user["inventory"][str(card_num)] <= 0:
+                    del user["inventory"][str(card_num)]
+                    await message.channel.send(f"Card #{card_num} removed from inventory.")
+                else:
+                    await message.channel.send(f"Card #{card_num} quantity is now {user['inventory'][str(card_num)]}")
+                
+                save_data()
+            except ValueError:
+                await message.channel.send("Please provide valid numbers.")
+        else:
+            await message.channel.send("Usage: `$num # +/-#` or `$num random #/all`")
+        return
+
+    # Keep existing functionality
+    if content.startswith('roll d20'):
+        roll_result = random.randint(1, 20)
+        if roll_result < 2:
+            await message.channel.send(f'You rolled a d20 and got {roll_result} dm, kill this mf.')
+        elif roll_result < 10:
+            await message.channel.send(f'You rolled a d20 and got {roll_result} get fucked lmao!')
+        elif roll_result < 20:
+            await message.channel.send(f'You rolled a d20 and got {roll_result} not bad!')
+        else:
+            await message.channel.send(f'You rolled a d20 and got {roll_result} sheeeesh')
+
+    if ":sob:" in message.content:
+        await message.channel.send("L")
+
+# Run the bot
+if __name__ == "__main__":
+    try:
+        token = os.getenv("DISCORD_BOT_TOKEN")
+        
+        if not token:
+            token = "YOUR_BOT_TOKEN_HERE"
+        
+        if token == "YOUR_BOT_TOKEN_HERE" or not token:
+            print("="*50)
+            print("ERROR: Please set your Discord bot token!")
+            print("="*50)
+            print("1. Go to Discord Developer Portal")
+            print("2. Get your bot token")
+            print("3. Set it as environment variable DISCORD_BOT_TOKEN")
+            print("4. NEVER commit real tokens to GitHub!")
+        else:
+            print("Starting bot...")
+            client.run(token)
+            
+    except discord.LoginFailure as e:
+        print(f"Login failed: {e}")
+        print("Please check your token is correct and not expired.")
+    except discord.HTTPException as e:
+        if e.status == 429:
+            print("Rate limited - too many requests")
+        else:
+            raise e
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
