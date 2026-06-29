@@ -64,6 +64,23 @@ card_library = {
     50: {"name": "Memory", "mp": "cost of card(s) copied +1/card", "type": "Command", "info": "copies cards used recently, the cards costing the mirrored cards' total mp +1 mp per card"}
 }
 
+# Default deck for new players (old default)
+DEFAULT_DECK = {
+    "mp": 10,
+    "mp_recovery": 4,
+    "mp_cap": 10,
+    "inventory": {
+        "1": 5, "2": 5, "3": 5, "4": 5,  # Fire, Wind, Water, Earth
+        "21": 5, "22": 5, "23": 5, "24": 5,  # Ball, Bolt, Wall, Burst
+        "31": 5, "32": 5, "33": 5, "34": 5   # Forward, Down, Spin, Split
+    },
+    "active_deck": [],
+    "deck_mode": "limitless",
+    "hand": [],
+    "bad_luck_streak": 0,
+    "good_luck_streak": 0
+}
+
 # Data structure for each user
 user_data = {}
 
@@ -94,17 +111,7 @@ def save_data():
 def get_user(user_id):
     user_id = str(user_id)
     if user_id not in user_data:
-        user_data[user_id] = {
-            "mp": 0,
-            "mp_recovery": 4,
-            "mp_cap": 0,
-            "inventory": {},
-            "active_deck": [],
-            "deck_mode": "limitless",
-            "hand": [],
-            "bad_luck_streak": 0,
-            "good_luck_streak": 0
-        }
+        user_data[user_id] = DEFAULT_DECK.copy()
         save_data()
     return user_data[user_id]
 
@@ -247,11 +254,14 @@ async def on_message(message):
 `$settings mp @player #` - Admin: Set another player's MP
 `$settings recovery @player #` - Admin: Set another player's MP recovery
 `$reset all` - Full reset for everyone
+`$default` - Reset your deck to the default deck
 `$x #` - Reroll cards (with category protection)
 `$x @player #` - Admin: Reroll cards for another player
 `$r` - Roll d20
 `$hand` - Show current hand
 `$hand @player` - Admin: Show another player's hand
+`$save` - Show your stats and inventory in a copyable format
+`$save @player` - Admin: Show another player's stats
         """
         await message.channel.send(help_text)
         return
@@ -576,6 +586,22 @@ Info: {card['info']}
             await message.channel.send(f"**Your Current Hand:**\n```\n{hand_display}```")
         return
 
+    # DEFAULT COMMAND - Reset to default deck
+    if content.startswith('$default'):
+        # Check if targeting another player (admin only)
+        if target_user_id != user_id:
+            if not is_admin:
+                await message.channel.send("You don't have permission to reset another player's deck.")
+                return
+            target_user.update(DEFAULT_DECK.copy())
+            save_data()
+            await message.channel.send(f"Reset <@{target_user_id}>'s deck to default!")
+        else:
+            user.update(DEFAULT_DECK.copy())
+            save_data()
+            await message.channel.send("Your deck has been reset to default!")
+        return
+
     # X COMMAND - Reroll cards
     if content.startswith('$x'):
         parts = content.split()
@@ -758,6 +784,40 @@ Info: {card['info']}
                 await message.channel.send(f"Deck mode set to: {mode}")
             else:
                 await message.channel.send("Invalid mode. Choose 'limited' or 'limitless'.")
+        return
+
+    # SAVE COMMAND - Show stats and inventory in copyable format
+    if content.startswith('$save'):
+        if target_user_id != user_id:
+            await message.channel.send(f"**<@{target_user_id}>'s Stats:**")
+        
+        # Build the stats display
+        stats = f"Max Mp: {target_user['mp_cap']}\n"
+        stats += f"Mp Recovery: {target_user['mp_recovery']}\n"
+        stats += f"Deck Mode: {target_user['deck_mode']}\n\n"
+        stats += "**Inventory:**\n"
+        
+        # Sort inventory by card number
+        sorted_inventory = sorted(target_user["inventory"].items(), key=lambda x: int(x[0]))
+        
+        for card_num, quantity in sorted_inventory:
+            card_num_int = int(card_num)
+            if card_num_int in card_library:
+                stats += f"{card_num} {quantity}\n"
+        
+        # Send the stats
+        await message.channel.send(f"```\n{stats}```")
+        
+        # Send copyable format for $add
+        copyable = "**Copy this to restore your deck with `$add`:**\n```\n"
+        for card_num, quantity in sorted_inventory:
+            copyable += f"{card_num} {quantity}\n"
+        copyable += "```"
+        
+        if target_user_id != user_id:
+            await message.channel.send(f"<@{target_user_id}>'s copyable inventory:\n{copyable}")
+        else:
+            await message.channel.send(copyable)
         return
 
     # RESET ALL COMMAND
