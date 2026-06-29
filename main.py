@@ -3,6 +3,7 @@ import discord
 import random
 import json
 import sys
+import re
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -11,56 +12,56 @@ client = discord.Client(intents=intents)
 
 # Define the complete library of cards
 card_library = {
-    1: {"name": "Fire", "mp": 3, "type": "Element", "info": "creates flames using mana"},
-    2: {"name": "Wind", "mp": 3, "type": "Element", "info": "creates wind using mana"},
-    3: {"name": "Water", "mp": 3, "type": "Element", "info": "creates water using mana"},
-    4: {"name": "Earth", "mp": 3, "type": "Element", "info": "creates earth using mana"},
-    5: {"name": "Null", "mp": 1, "type": "Element", "info": "solidifies pure mana, able to take on aspects of elements it comes in contact with"},
-    6: {"name": "Dark", "mp": 4, "type": "Element", "info": "creates darkness using mana, weak physically unless condensed"},
-    7: {"name": "Light", "mp": 4, "type": "Element", "info": "creates light using mana, weak physically unless condensed"},
-    8: {"name": "Magma", "mp": 5, "type": "Element", "info": "creates magma, a fusion of <Fire> and <Earth> using mana"},
-    9: {"name": "Lightning", "mp": 6, "type": "Element", "info": "creates lightning using mana, advanced form of <Fire> that strikes with clusters of electricity"},
-    10: {"name": "Ice", "mp": 5, "type": "Element", "info": "creates ice using mana, advanced form of <Water> that spreads its frozen touch"},
-    11: {"name": "Storm", "mp": 6, "type": "Element", "info": "creates miniature storms using mana, a fusion of <Wind> and <Water> (if condensed, chance of electricity generated is increased)"},
-    12: {"name": "Sound", "mp": 5, "type": "Element", "info": "creates sound using mana, advanced form of <Wind> that uses precise manipulation and could create shockwaves"},
-    13: {"name": "Vacuum", "mp": 6, "type": "Element", "info": "creates a vacuum using mana, advanced form of <Wind> that sucks out the very matter from a area"},
-    14: {"name": "Metal", "mp": 5, "type": "Element", "info": "creates metal using mana, advanced form of <Earth> that forms reinforced alloy several times stronger than stone (its traits can vary)"},
-    15: {"name": "Gravity", "mp": 6, "type": "Element", "info": "creates a gravity field using mana, advanced form of <Earth> that warps space towards a direction"},
-    16: {"name": "Demonic", "mp": 6, "type": "Element", "info": "summons demonic energy using mana, eats away at the one's flesh using their sins and leaving the wound difficult to heal (optional targeting)"},
-    17: {"name": "Divine", "mp": 6, "type": "Element", "info": "summons divine energy using mana, judges targets for their sins and mends the wounds of allies (optional targeting)"},
-    18: {"name": "Hellfire", "mp": 8, "type": "Element", "info": "creates hellfire using mana, a fusion of <Fire> and <Divine> that passes judgement on a target, burning for as long as their sins can fuel it (optional targeting, can heal allies)"},
-    19: {"name": "Permafrost", "mp": 8, "type": "Element", "info": "creates permafrost using mana, a fusion of <Ice> and <Demonic> that corrodes one's skin, freezing it for as long as their sins can fuel it (optional targeting, hard to heal)"},
-    20: {"name": "Void", "mp": 10, "type": "Element", "info": "creates a void, a tear in space using mana that rips apart anything it touches, its sheer power makes it difficult to manipulate as a element, causing elements, shapes, and trajectories added to be double cost (the void is slow moving but overwhelmingly powerful)"},
-    21: {"name": "Ball", "mp": 2, "type": "Shape", "info": "condenses the element into a ball, rupturing when broken"},
-    22: {"name": "Bolt", "mp": 2, "type": "Shape", "info": "condenses the element into a javelin, piercing those in its path"},
-    23: {"name": "Wall", "mp": 3, "type": "Shape", "info": "condenses the element into a wall about 6 by 6 ft in length (able to be slightly changed)"},
-    24: {"name": "Burst", "mp": 3, "type": "Shape", "info": "condenses the element that then explodes out in every direction with great force"},
-    25: {"name": "Slash", "mp": 2, "type": "Shape", "info": "condenses the element into a crescent shape able to cut through those in its way"},
-    26: {"name": "Pillar", "mp": 4, "type": "Shape", "info": "shoots out a element in a circular beam several feet wide from the ground/sky in a vertical direction for several seconds"},
-    27: {"name": "Swamp", "mp": 5, "type": "Shape", "info": "spreads the element on the ground in a 10 feet diameter"},
-    28: {"name": "Beam", "mp": 4, "type": "Shape", "info": "shoots out a element in a small circular beam like a laser for several seconds"},
-    29: {"name": "Wire", "mp": 2, "type": "Shape", "info": "condenses the element into a single sharp thread, its length variable"},
-    30: {"name": "Trail", "mp": 2, "type": "Shape", "info": "leaves a trail of a element as the spells move, the lingering effect is a weaker version of said element"},
-    31: {"name": "Forward", "mp": 1, "type": "Command", "info": "propels a spell forward, its direction is varying"},
-    32: {"name": "Down", "mp": 1, "type": "Command", "info": "slams the spell downwards quickly"},
-    33: {"name": "Spin", "mp": 2, "type": "Command", "info": "spins the entire or parts of the spell around"},
-    34: {"name": "Split", "mp": 2, "type": "Command", "info": "splits a spell into smaller versions, number of splits varying"},
-    35: {"name": "Reverse", "mp": "Variable", "type": "Command", "info": "reverses the trajectory that went before it"},
-    36: {"name": "Chain", "mp": 3, "type": "Command", "info": "chain the spell's effect from one target to another near each other"},
-    37: {"name": "Trap", "mp": 4, "type": "Command", "info": "places a spell on the ground that is activated when something is over its surface"},
-    38: {"name": "Arc", "mp": 2, "type": "Command", "info": "propels a spell forward in a arc, its direction varying"},
-    39: {"name": "Expand", "mp": "Variable", "type": "Command", "info": "doubles the size of a spell, costing x2 more Mp each size double"},
-    40: {"name": "Shrink", "mp": "Variable", "type": "Command", "info": "halves the size of a spell, costing x2 more Mp each size is halved"},
-    41: {"name": "Drill", "mp": 4, "type": "Command", "info": "propel a spell forward in a arc, piercing through environments in its way"},
-    42: {"name": "Turn", "mp": 1, "type": "Command", "info": "a weaker <forward> used to make a spell redirect towards the target"},
-    43: {"name": "Homing", "mp": 3, "type": "Command", "info": "curves the spell towards a target slightly"},
-    44: {"name": "Ripple", "mp": 5, "type": "Command", "info": "sends out a spell in a 360 wave that ripples outward, fast at first but slows as it goes further (stops at environments blocking its way)"},
-    45: {"name": "Delay", "mp": 1, "type": "Command", "info": "delays the next cards in sequence for a spell, time delayed varying"},
-    46: {"name": "Curse", "mp": 5, "type": "Command", "info": "curses the target based on how much the spell hits them and activates the next spell"},
-    47: {"name": "Soften", "mp": "Variable", "type": "Command", "info": "softens the spell or spell shape, intensity based on amount of mp used"},
-    48: {"name": "Harden", "mp": "Variable", "type": "Command", "info": "hardens the spell or spell shape, intensity based on amount of mp used"},
-    49: {"name": "External", "mp": 3, "type": "Command", "info": "gathers the element specified and allows the user to manipulate it with spell cards"},
-    50: {"name": "Memory", "mp": "Variable", "type": "Command", "info": "copies cards used recently, the cards costing the mirrored cards' total mp +1 mp per card"}
+    1: {"name": "Fire", "mp": "3", "type": "Element", "info": "creates flames using mana"},
+    2: {"name": "Wind", "mp": "3", "type": "Element", "info": "creates wind using mana"},
+    3: {"name": "Water", "mp": "3", "type": "Element", "info": "creates water using mana"},
+    4: {"name": "Earth", "mp": "3", "type": "Element", "info": "creates earth using mana"},
+    5: {"name": "Null", "mp": "1", "type": "Element", "info": "solidifies pure mana, able to take on aspects of elements it comes in contact with"},
+    6: {"name": "Dark", "mp": "4", "type": "Element", "info": "creates darkness using mana, weak physically unless condensed"},
+    7: {"name": "Light", "mp": "4", "type": "Element", "info": "creates light using mana, weak physically unless condensed"},
+    8: {"name": "Magma", "mp": "5", "type": "Element", "info": "creates magma, a fusion of <Fire> and <Earth> using mana"},
+    9: {"name": "Lightning", "mp": "6", "type": "Element", "info": "creates lightning using mana, advanced form of <Fire> that strikes with clusters of electricity"},
+    10: {"name": "Ice", "mp": "5", "type": "Element", "info": "creates ice using mana, advanced form of <Water> that spreads its frozen touch"},
+    11: {"name": "Storm", "mp": "6", "type": "Element", "info": "creates miniature storms using mana, a fusion of <Wind> and <Water> (if condensed, chance of electricity generated is increased)"},
+    12: {"name": "Sound", "mp": "5", "type": "Element", "info": "creates sound using mana, advanced form of <Wind> that uses precise manipulation and could create shockwaves"},
+    13: {"name": "Vacuum", "mp": "6", "type": "Element", "info": "creates a vacuum using mana, advanced form of <Wind> that sucks out the very matter from a area"},
+    14: {"name": "Metal", "mp": "5", "type": "Element", "info": "creates metal using mana, advanced form of <Earth> that forms reinforced alloy several times stronger than stone (its traits can vary)"},
+    15: {"name": "Gravity", "mp": "6", "type": "Element", "info": "creates a gravity field using mana, advanced form of <Earth> that warps space towards a direction"},
+    16: {"name": "Demonic", "mp": "6", "type": "Element", "info": "summons demonic energy using mana, eats away at the one's flesh using their sins and leaving the wound difficult to heal (optional targeting)"},
+    17: {"name": "Divine", "mp": "6", "type": "Element", "info": "summons divine energy using mana, judges targets for their sins and mends the wounds of allies (optional targeting)"},
+    18: {"name": "Hellfire", "mp": "8", "type": "Element", "info": "creates hellfire using mana, a fusion of <Fire> and <Divine> that passes judgement on a target, burning for as long as their sins can fuel it (optional targeting, can heal allies)"},
+    19: {"name": "Permafrost", "mp": "8", "type": "Element", "info": "creates permafrost using mana, a fusion of <Ice> and <Demonic> that corrodes one's skin, freezing it for as long as their sins can fuel it (optional targeting, hard to heal)"},
+    20: {"name": "Void", "mp": "10", "type": "Element", "info": "creates a void, a tear in space using mana that rips apart anything it touches, its sheer power makes it difficult to manipulate as a element, causing elements, shapes, and trajectories added to be double cost (the void is slow moving but overwhelmingly powerful)"},
+    21: {"name": "Ball", "mp": "2", "type": "Shape", "info": "condenses the element into a ball, rupturing when broken"},
+    22: {"name": "Bolt", "mp": "2", "type": "Shape", "info": "condenses the element into a javelin, piercing those in its path"},
+    23: {"name": "Wall", "mp": "3", "type": "Shape", "info": "condenses the element into a wall about 6 by 6 ft in length (able to be slightly changed)"},
+    24: {"name": "Burst", "mp": "3", "type": "Shape", "info": "condenses the element that then explodes out in every direction with great force"},
+    25: {"name": "Slash", "mp": "2", "type": "Shape", "info": "condenses the element into a crescent shape able to cut through those in its way"},
+    26: {"name": "Pillar", "mp": "4", "type": "Shape", "info": "shoots out a element in a circular beam several feet wide from the ground/sky in a vertical direction for several seconds"},
+    27: {"name": "Swamp", "mp": "5", "type": "Shape", "info": "spreads the element on the ground in a 10 feet diameter"},
+    28: {"name": "Beam", "mp": "4", "type": "Shape", "info": "shoots out a element in a small circular beam like a laser for several seconds"},
+    29: {"name": "Wire", "mp": "2", "type": "Shape", "info": "condenses the element into a single sharp thread, its length variable"},
+    30: {"name": "Trail", "mp": "2", "type": "Shape", "info": "leaves a trail of a element as the spells move, the lingering effect is a weaker version of said element"},
+    31: {"name": "Forward", "mp": "1", "type": "Command", "info": "propels a spell forward, its direction is varying"},
+    32: {"name": "Down", "mp": "1", "type": "Command", "info": "slams the spell downwards quickly"},
+    33: {"name": "Spin", "mp": "2", "type": "Command", "info": "spins the entire or parts of the spell around"},
+    34: {"name": "Split", "mp": "2", "type": "Command", "info": "splits a spell into smaller versions, number of splits varying"},
+    35: {"name": "Reverse", "mp": "Cost of what it's reversing", "type": "Command", "info": "reverses the trajectory that went before it"},
+    36: {"name": "Chain", "mp": "3", "type": "Command", "info": "chain the spell's effect from one target to another near each other"},
+    37: {"name": "Trap", "mp": "4", "type": "Command", "info": "places a spell on the ground that is activated when something is over its surface"},
+    38: {"name": "Arc", "mp": "2", "type": "Command", "info": "propels a spell forward in a arc, its direction varying"},
+    39: {"name": "Expand", "mp": "1 (x2 Mp each size double)", "type": "Command", "info": "doubles the size of a spell, costing x2 more Mp each size double"},
+    40: {"name": "Shrink", "mp": "1 (x2 Mp each size halving)", "type": "Command", "info": "halves the size of a spell, costing x2 more Mp each size is halved"},
+    41: {"name": "Drill", "mp": "4", "type": "Command", "info": "propel a spell forward in a arc, piercing through environments in its way"},
+    42: {"name": "Turn", "mp": "1", "type": "Command", "info": "a weaker <forward> used to make a spell redirect towards the target"},
+    43: {"name": "Homing", "mp": "3", "type": "Command", "info": "curves the spell towards a target slightly"},
+    44: {"name": "Ripple", "mp": "5", "type": "Command", "info": "sends out a spell in a 360 wave that ripples outward, fast at first but slows as it goes further (stops at environments blocking its way)"},
+    45: {"name": "Delay", "mp": "1", "type": "Command", "info": "delays the next cards in sequence for a spell, time delayed varying"},
+    46: {"name": "Curse", "mp": "5", "type": "Command", "info": "curses the target based on how much the spell hits them and activates the next spell"},
+    47: {"name": "Soften", "mp": "2-4", "type": "Command", "info": "softens the spell or spell shape, intensity based on amount of mp used"},
+    48: {"name": "Harden", "mp": "2-4", "type": "Command", "info": "hardens the spell or spell shape, intensity based on amount of mp used"},
+    49: {"name": "External", "mp": "3", "type": "Command", "info": "gathers the element specified and allows the user to manipulate it with spell cards"},
+    50: {"name": "Memory", "mp": "cost of card(s) copied +1/card", "type": "Command", "info": "copies cards used recently, the cards costing the mirrored cards' total mp +1 mp per card"}
 }
 
 # Data structure for each user
@@ -109,9 +110,10 @@ def get_user(user_id):
 
 def format_card(card_num):
     card = card_library[card_num]
-    if card["mp"] == "Variable":
-        return f"{card['name']} - Variable Mp"
     return f"{card['name']} - {card['mp']} Mp"
+
+def format_card_name_only(card_num):
+    return card_library[card_num]['name']
 
 def format_hand(hand):
     if not hand:
@@ -125,8 +127,8 @@ def format_active_deck(deck):
     if not deck:
         return "Empty"
     result = ""
-    for i, card_num in enumerate(deck, 1):
-        result += f"{card_num}. {format_card(card_num)}\n"  # Shows library number, not a separate numbered list
+    for card_num in deck:
+        result += f"{card_num}. {format_card(card_num)}\n"
     return result
 
 def ensure_category_balance(hand):
@@ -178,6 +180,12 @@ def ensure_category_balance(hand):
     
     return new_hand
 
+def extract_mentions(text):
+    """Extract all user mentions from text"""
+    mention_pattern = r'<@!?(\d+)>'
+    matches = re.findall(mention_pattern, text)
+    return matches
+
 @client.event
 async def on_ready():
     load_data()
@@ -194,6 +202,24 @@ async def on_message(message):
     user_id = str(message.author.id)
     user = get_user(user_id)
     
+    # Check if user is admin
+    is_admin = message.author.guild_permissions.manage_messages or message.author.guild_permissions.administrator
+    
+    # Extract any mentions in the command
+    mentioned_users = extract_mentions(content)
+    target_user = None
+    target_user_id = None
+    
+    # If there's a mention and user is admin, target that user
+    if mentioned_users and is_admin:
+        target_user_id = mentioned_users[0]
+        target_user = get_user(target_user_id)
+    
+    # If no target, use the command sender
+    if not target_user:
+        target_user = user
+        target_user_id = user_id
+    
     # HELP COMMAND
     if content.startswith('$help'):
         help_text = """
@@ -201,15 +227,20 @@ async def on_message(message):
 `$library all/element/shape/command` - View cards by category
 `$info #` - Get card details
 `$add` (two lines: card_number quantity) - Add cards to inventory
-`$add @player` (two lines: card_number quantity) - Admin: Add cards to another player's inventory
+`$add @player` (two lines) - Admin: Add cards to another player
 `$cards` - Check full inventory
-`$use # # #` - Put cards into active deck (takes from inventory)
+`$cards @player` - Admin: Check another player's inventory
+`$use # # #` - Put cards into active deck
+`$use @player # # #` - Admin: Put cards into another player's active deck
 `$deck` - Show current active deck
+`$deck @player` - Admin: Show another player's active deck
 `$plus #` - Add card to active deck (even after draw)
 `$draw` - Draw 6 cards from active deck (clears after)
+`$draw @player` - Admin: Draw cards for another player
 `$num # +/-#` - Modify card quantities
 `$num random #/all` - Randomize quantities
 `$mp turn` - Add MP recovery
+`$mp turn @player` - Admin: Add MP recovery for another player
 `$settings turn #` - Set MP recovery
 `$settings deck limited/limitless` - Set deck mode
 `$settings deck @player limited/limitless` - Admin: Set another player's deck mode
@@ -217,8 +248,10 @@ async def on_message(message):
 `$settings recovery @player #` - Admin: Set another player's MP recovery
 `$reset all` - Full reset for everyone
 `$x #` - Reroll cards (with category protection)
+`$x @player #` - Admin: Reroll cards for another player
 `$r` - Roll d20
 `$hand` - Show current hand
+`$hand @player` - Admin: Show another player's hand
         """
         await message.channel.send(help_text)
         return
@@ -234,28 +267,19 @@ async def on_message(message):
             result += "## Element ##\n"
             for num, card in card_library.items():
                 if card["type"] == "Element":
-                    if card["mp"] == "Variable":
-                        result += f"{num}. {card['name']} - Variable Mp\n"
-                    else:
-                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
+                    result += f"{num}. {card['name']} - {card['mp']} Mp\n"
             
             # Shapes
             result += "\n## Shape ##\n"
             for num, card in card_library.items():
                 if card["type"] == "Shape":
-                    if card["mp"] == "Variable":
-                        result += f"{num}. {card['name']} - Variable Mp\n"
-                    else:
-                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
+                    result += f"{num}. {card['name']} - {card['mp']} Mp\n"
             
             # Commands
             result += "\n## Command ##\n"
             for num, card in card_library.items():
                 if card["type"] == "Command":
-                    if card["mp"] == "Variable":
-                        result += f"{num}. {card['name']} - Variable Mp\n"
-                    else:
-                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
+                    result += f"{num}. {card['name']} - {card['mp']} Mp\n"
         else:
             # Filter by category
             category_map = {"element": "Element", "shape": "Shape", "command": "Command"}
@@ -264,10 +288,7 @@ async def on_message(message):
             result += f"## {cat_filter} ##\n"
             for num, card in card_library.items():
                 if card["type"] == cat_filter:
-                    if card["mp"] == "Variable":
-                        result += f"{num}. {card['name']} - Variable Mp\n"
-                    else:
-                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
+                    result += f"{num}. {card['name']} - {card['mp']} Mp\n"
         
         await message.channel.send(result[:2000])
         return
@@ -297,25 +318,14 @@ Info: {card['info']}
             await message.channel.send("Please provide a valid number.")
         return
 
-    # ADD COMMAND - Two line format (for self or admin for others)
+    # ADD COMMAND
     if content.startswith('$add'):
-        parts = content.split()
-        target_user = None
-        target_user_id = None
-        
-        # Check if admin is adding to another player
-        if len(parts) >= 2 and parts[1].startswith('<@'):
-            is_admin = message.author.guild_permissions.manage_messages or message.author.guild_permissions.administrator
-            if not is_admin:
-                await message.channel.send("You don't have permission to add cards to other players.")
-                return
-            
-            # Extract user ID from mention
-            target_user_id = parts[1].replace('<@', '').replace('>', '').replace('!', '')
-            target_user = get_user(target_user_id)
+        # Remove the command and mention from content for the prompt
+        clean_content = content
+        if target_user_id != user_id:
+            # Admin adding to someone else
             await message.channel.send(f"Adding cards to <@{target_user_id}>. Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
         else:
-            target_user = user
             await message.channel.send("Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
         
         def check(m):
@@ -327,11 +337,11 @@ Info: {card['info']}
             
             added_cards = []
             for line in lines:
-                parts2 = line.strip().split()
-                if len(parts2) >= 2:
+                parts = line.strip().split()
+                if len(parts) >= 2:
                     try:
-                        card_num = int(parts2[0])
-                        quantity = int(parts2[1])
+                        card_num = int(parts[0])
+                        quantity = int(parts[1])
                         
                         if card_num not in card_library:
                             await message.channel.send(f"Card #{card_num} not found in library.")
@@ -346,13 +356,13 @@ Info: {card['info']}
                                 target_user["inventory"][str(card_num)] = 0
                             target_user["inventory"][str(card_num)] += quantity
                         
-                        added_cards.append(f"#{card_num} x{quantity}")
+                        added_cards.append(f"{card_library[card_num]['name']} x{quantity}")
                     except ValueError:
                         await message.channel.send(f"Invalid input: '{line}'. Skipping.")
             
             if added_cards:
                 save_data()
-                if target_user_id:
+                if target_user_id != user_id:
                     await message.channel.send(f"Added to <@{target_user_id}>: {', '.join(added_cards)}")
                 else:
                     await message.channel.send(f"Added: {', '.join(added_cards)}\nUse `$use` to equip them to your active deck.")
@@ -365,170 +375,233 @@ Info: {card['info']}
 
     # CARDS COMMAND (Inventory)
     if content.startswith('$cards'):
-        inventory = user["inventory"]
-        if not inventory:
-            await message.channel.send("Your inventory is empty. Use `$add` to add cards.")
-            return
-        
-        result = "**Your Cards (Inventory):**\n"
-        for card_num, quantity in inventory.items():
-            card_num = int(card_num)
-            if card_num in card_library:
-                card = card_library[card_num]
-                if user["deck_mode"] == "limitless":
-                    result += f"{card_num}. {card['name']} - ∞ (Limitless)\n"
-                else:
-                    result += f"{card_num}. {card['name']} - {quantity}x\n"
+        if target_user_id != user_id:
+            inventory = target_user["inventory"]
+            if not inventory:
+                await message.channel.send(f"<@{target_user_id}>'s inventory is empty.")
+                return
+            
+            result = f"**<@{target_user_id}>'s Cards (Inventory):**\n"
+            for card_num, quantity in inventory.items():
+                card_num = int(card_num)
+                if card_num in card_library:
+                    card = card_library[card_num]
+                    if target_user["deck_mode"] == "limitless":
+                        result += f"{card_num}. {card['name']} - ∞ (Limitless)\n"
+                    else:
+                        result += f"{card_num}. {card['name']} - {quantity}x\n"
+        else:
+            inventory = user["inventory"]
+            if not inventory:
+                await message.channel.send("Your inventory is empty. Use `$add` to add cards.")
+                return
+            
+            result = "**Your Cards (Inventory):**\n"
+            for card_num, quantity in inventory.items():
+                card_num = int(card_num)
+                if card_num in card_library:
+                    card = card_library[card_num]
+                    if user["deck_mode"] == "limitless":
+                        result += f"{card_num}. {card['name']} - ∞ (Limitless)\n"
+                    else:
+                        result += f"{card_num}. {card['name']} - {quantity}x\n"
         
         await message.channel.send(result[:2000])
         return
 
-    # USE COMMAND - Add cards to active deck
+    # USE COMMAND - Add cards to active deck with card names
     if content.startswith('$use'):
         parts = content.split()
-        if len(parts) < 2:
+        
+        # Remove the mention from parts if it exists
+        clean_parts = []
+        for part in parts:
+            if not part.startswith('<@'):
+                clean_parts.append(part)
+        
+        if len(clean_parts) < 2:
             await message.channel.send("Please specify which cards to use. Example: `$use 1 2 3`")
             return
         
         added_cards = []
-        for part in parts[1:]:
+        for part in clean_parts[1:]:
             try:
                 card_num = int(part)
                 if card_num not in card_library:
                     await message.channel.send(f"Card #{card_num} not found in library.")
                     continue
                 
-                if str(card_num) not in user["inventory"] or user["inventory"][str(card_num)] <= 0:
+                if str(card_num) not in target_user["inventory"] or target_user["inventory"][str(card_num)] <= 0:
                     await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                     continue
                 
-                user["active_deck"].append(card_num)
+                target_user["active_deck"].append(card_num)
                 
-                if user["deck_mode"] == "limited":
-                    user["inventory"][str(card_num)] -= 1
-                    if user["inventory"][str(card_num)] <= 0:
-                        del user["inventory"][str(card_num)]
+                if target_user["deck_mode"] == "limited":
+                    target_user["inventory"][str(card_num)] -= 1
+                    if target_user["inventory"][str(card_num)] <= 0:
+                        del target_user["inventory"][str(card_num)]
                 
-                added_cards.append(f"#{card_num}")
+                added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
             except ValueError:
                 await message.channel.send(f"Invalid card number: '{part}'")
         
         if added_cards:
             save_data()
-            deck_display = format_active_deck(user["active_deck"])
-            await message.channel.send(f"Added: {', '.join(added_cards)}\n```\n{deck_display}```")
+            deck_display = format_active_deck(target_user["active_deck"])
+            if target_user_id != user_id:
+                await message.channel.send(f"Added to <@{target_user_id}>'s active deck: {', '.join(added_cards)}\n```\n{deck_display}```")
+            else:
+                await message.channel.send(f"Added to active deck: {', '.join(added_cards)}\n```\n{deck_display}```")
         else:
             await message.channel.send("No valid cards added.")
         return
 
     # DECK COMMAND - Show active deck
     if content.startswith('$deck'):
-        deck = user["active_deck"]
+        deck = target_user["active_deck"]
         if not deck:
-            await message.channel.send("Your active deck is empty. Use `$use` or `$plus` to add cards.")
+            if target_user_id != user_id:
+                await message.channel.send(f"<@{target_user_id}>'s active deck is empty.")
+            else:
+                await message.channel.send("Your active deck is empty. Use `$use` or `$plus` to add cards.")
             return
         
         deck_display = format_active_deck(deck)
-        await message.channel.send(f"**Your Active Deck:**\n```\n{deck_display}```")
+        if target_user_id != user_id:
+            await message.channel.send(f"**<@{target_user_id}>'s Active Deck:**\n```\n{deck_display}```")
+        else:
+            await message.channel.send(f"**Your Active Deck:**\n```\n{deck_display}```")
         return
 
     # PLUS COMMAND - Add card to active deck
     if content.startswith('$plus'):
         parts = content.split()
-        if len(parts) < 2:
+        
+        # Remove the mention from parts if it exists
+        clean_parts = []
+        for part in parts:
+            if not part.startswith('<@'):
+                clean_parts.append(part)
+        
+        if len(clean_parts) < 2:
             await message.channel.send("Please specify which card to add. Example: `$plus 1`")
             return
         
         added_cards = []
-        for part in parts[1:]:
+        for part in clean_parts[1:]:
             try:
                 card_num = int(part)
                 if card_num not in card_library:
                     await message.channel.send(f"Card #{card_num} not found in library.")
                     continue
                 
-                if str(card_num) not in user["inventory"] or user["inventory"][str(card_num)] <= 0:
+                if str(card_num) not in target_user["inventory"] or target_user["inventory"][str(card_num)] <= 0:
                     await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                     continue
                 
-                user["active_deck"].append(card_num)
+                target_user["active_deck"].append(card_num)
                 
-                if user["deck_mode"] == "limited":
-                    user["inventory"][str(card_num)] -= 1
-                    if user["inventory"][str(card_num)] <= 0:
-                        del user["inventory"][str(card_num)]
+                if target_user["deck_mode"] == "limited":
+                    target_user["inventory"][str(card_num)] -= 1
+                    if target_user["inventory"][str(card_num)] <= 0:
+                        del target_user["inventory"][str(card_num)]
                 
-                added_cards.append(f"#{card_num}")
+                added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
             except ValueError:
                 await message.channel.send(f"Invalid card number: '{part}'")
         
         if added_cards:
             save_data()
-            deck_display = format_active_deck(user["active_deck"])
-            await message.channel.send(f"Added to active deck: {', '.join(added_cards)}\n```\n{deck_display}```")
+            deck_display = format_active_deck(target_user["active_deck"])
+            if target_user_id != user_id:
+                await message.channel.send(f"Added to <@{target_user_id}>'s active deck: {', '.join(added_cards)}\n```\n{deck_display}```")
+            else:
+                await message.channel.send(f"Added to active deck: {', '.join(added_cards)}\n```\n{deck_display}```")
         else:
             await message.channel.send("No valid cards added.")
         return
 
     # DRAW COMMAND
     if content.startswith('$draw'):
-        if not user["active_deck"]:
-            await message.channel.send("You have no cards in your active deck! Use `$use # # #` to add cards first.")
+        if not target_user["active_deck"]:
+            if target_user_id != user_id:
+                await message.channel.send(f"<@{target_user_id}> has no cards in their active deck! Use `$use # # #` to add cards first.")
+            else:
+                await message.channel.send("You have no cards in your active deck! Use `$use # # #` to add cards first.")
             return
         
-        # Show MP before drawing
-        mp_message = f"Current MP: {user['mp']} Mp"
+        mp_message = f"Current MP: {target_user['mp']} Mp"
         
-        drawn_cards = random.sample(user["active_deck"], min(6, len(user["active_deck"])))
+        drawn_cards = random.sample(target_user["active_deck"], min(6, len(target_user["active_deck"])))
         
         while len(drawn_cards) < 6:
-            available_cards = [int(k) for k, v in user["inventory"].items() if v > 0]
+            available_cards = [int(k) for k, v in target_user["inventory"].items() if v > 0]
             if available_cards:
                 new_card = random.choice(available_cards)
                 drawn_cards.append(new_card)
-                if user["deck_mode"] == "limited":
-                    user["inventory"][str(new_card)] -= 1
-                    if user["inventory"][str(new_card)] <= 0:
-                        del user["inventory"][str(new_card)]
+                if target_user["deck_mode"] == "limited":
+                    target_user["inventory"][str(new_card)] -= 1
+                    if target_user["inventory"][str(new_card)] <= 0:
+                        del target_user["inventory"][str(new_card)]
             else:
                 break
         
         drawn_cards = ensure_category_balance(drawn_cards)
-        user["hand"] = drawn_cards
-        user["active_deck"] = []
+        target_user["hand"] = drawn_cards
+        target_user["active_deck"] = []
         
         save_data()
         
         hand_display = format_hand(drawn_cards)
-        await message.channel.send(f"{mp_message}\n**Your Drawn Cards:**\n```\n{hand_display}```")
+        if target_user_id != user_id:
+            await message.channel.send(f"<@{target_user_id}> - {mp_message}\n**Drawn Cards:**\n```\n{hand_display}```")
+        else:
+            await message.channel.send(f"{mp_message}\n**Your Drawn Cards:**\n```\n{hand_display}```")
         return
 
     # HAND COMMAND
     if content.startswith('$hand'):
-        if not user["hand"]:
-            await message.channel.send("You have no cards in hand. Use `$draw` to draw cards.")
+        if not target_user["hand"]:
+            if target_user_id != user_id:
+                await message.channel.send(f"<@{target_user_id}> has no cards in hand. Use `$draw` to draw cards.")
+            else:
+                await message.channel.send("You have no cards in hand. Use `$draw` to draw cards.")
             return
         
-        hand_display = format_hand(user["hand"])
-        await message.channel.send(f"**Your Current Hand:**\n```\n{hand_display}```")
+        hand_display = format_hand(target_user["hand"])
+        if target_user_id != user_id:
+            await message.channel.send(f"**<@{target_user_id}>'s Current Hand:**\n```\n{hand_display}```")
+        else:
+            await message.channel.send(f"**Your Current Hand:**\n```\n{hand_display}```")
         return
 
     # X COMMAND - Reroll cards
     if content.startswith('$x'):
         parts = content.split()
-        if len(parts) < 2:
+        
+        # Remove the mention from parts if it exists
+        clean_parts = []
+        for part in parts:
+            if not part.startswith('<@'):
+                clean_parts.append(part)
+        
+        if len(clean_parts) < 2:
             await message.channel.send("Please specify which cards to reroll. Example: `$x 1 3`")
             return
         
-        if not user["hand"]:
-            await message.channel.send("You have no cards in hand. Use `$draw` first.")
+        if not target_user["hand"]:
+            if target_user_id != user_id:
+                await message.channel.send(f"<@{target_user_id}> has no cards in hand. Use `$draw` first.")
+            else:
+                await message.channel.send("You have no cards in hand. Use `$draw` first.")
             return
         
         indices = []
-        for part in parts[1:]:
+        for part in clean_parts[1:]:
             try:
                 idx = int(part) - 1
-                if 0 <= idx < len(user["hand"]):
+                if 0 <= idx < len(target_user["hand"]):
                     indices.append(idx)
                 else:
                     await message.channel.send(f"Card {idx+1} is not in your hand.")
@@ -542,39 +615,47 @@ Info: {card['info']}
         
         total_mp_cost = 0
         for idx in indices:
-            card_num = user["hand"][idx]
+            card_num = target_user["hand"][idx]
             if card_num in card_library:
                 card = card_library[card_num]
-                if card["mp"] != "Variable":
-                    total_mp_cost += card["mp"]
-                else:
+                try:
+                    # Try to extract numeric value from mp string
+                    mp_value = card["mp"].split()[0] if " " in card["mp"] else card["mp"]
+                    if mp_value.replace("-", "").replace("+", "").isdigit():
+                        total_mp_cost += int(mp_value)
+                    else:
+                        total_mp_cost += 2
+                except:
                     total_mp_cost += 2
         
-        if user["mp"] < total_mp_cost and user["mp_cap"] > 0:
-            await message.channel.send(f"You don't have enough MP! You have {user['mp']} Mp, need {total_mp_cost} Mp.")
+        if target_user["mp"] < total_mp_cost and target_user["mp_cap"] > 0:
+            await message.channel.send(f"You don't have enough MP! You have {target_user['mp']} Mp, need {total_mp_cost} Mp.")
             return
         
-        user["mp"] -= total_mp_cost
+        target_user["mp"] -= total_mp_cost
         
         for idx in indices:
-            old_card = user["hand"][idx]
+            old_card = target_user["hand"][idx]
             old_type = card_library[old_card]["type"] if old_card in card_library else None
             
             possible_cards = [num for num, card in card_library.items() 
-                            if card["type"] == old_type and num not in user["hand"]]
+                            if card["type"] == old_type and num not in target_user["hand"]]
             if possible_cards:
                 new_card = random.choice(possible_cards)
-                user["hand"][idx] = new_card
+                target_user["hand"][idx] = new_card
         
-        user["hand"] = ensure_category_balance(user["hand"])
+        target_user["hand"] = ensure_category_balance(target_user["hand"])
         
         save_data()
         
-        hand_display = format_hand(user["hand"])
-        await message.channel.send(f"**Rerolled Cards!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
+        hand_display = format_hand(target_user["hand"])
+        if target_user_id != user_id:
+            await message.channel.send(f"**Rerolled Cards for <@{target_user_id}>!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
+        else:
+            await message.channel.send(f"**Rerolled Cards!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
         return
 
-    # R COMMAND - Simple d20 roll with proper responses
+    # R COMMAND - Simple d20 roll
     if content.startswith('$r'):
         roll_result = random.randint(1, 20)
         
@@ -590,25 +671,25 @@ Info: {card['info']}
 
     # MP TURN COMMAND
     if content.startswith('$mp turn'):
-        recovery = user["mp_recovery"]
-        user["mp"] += recovery
+        recovery = target_user["mp_recovery"]
+        target_user["mp"] += recovery
         
-        if user["mp_cap"] > 0 and user["mp"] > user["mp_cap"]:
-            user["mp"] = user["mp_cap"]
+        if target_user["mp_cap"] > 0 and target_user["mp"] > target_user["mp_cap"]:
+            target_user["mp"] = target_user["mp_cap"]
         
         save_data()
-        await message.channel.send(f"Added {recovery} Mp! Current MP: {user['mp']} Mp")
+        if target_user_id != user_id:
+            await message.channel.send(f"Added {recovery} Mp to <@{target_user_id}>! Current MP: {target_user['mp']} Mp")
+        else:
+            await message.channel.send(f"Added {recovery} Mp! Current MP: {target_user['mp']} Mp")
         return
 
-    # SETTINGS COMMAND - Updated with admin features
+    # SETTINGS COMMAND
     if content.startswith('$settings'):
         parts = content.split()
         if len(parts) < 2:
             await message.channel.send("Available settings:\n`$settings turn #` - Set MP recovery\n`$settings deck limited/limitless` - Set deck mode\n`$settings deck @player limited/limitless` - Admin: Set another player's deck mode\n`$settings mp @player #` - Admin: Set another player's MP\n`$settings recovery @player #` - Admin: Set another player's MP recovery")
             return
-        
-        # Check if user has admin permissions (can manage messages or is server admin)
-        is_admin = message.author.guild_permissions.manage_messages or message.author.guild_permissions.administrator
         
         # Admin command - set another player's deck mode
         if parts[1] == "deck" and len(parts) >= 4 and parts[2].startswith('<@'):
@@ -616,15 +697,11 @@ Info: {card['info']}
                 await message.channel.send("You don't have permission to modify other players' settings.")
                 return
             
-            # Extract user ID from mention
-            user_id = parts[2].replace('<@', '').replace('>', '').replace('!', '')
-            target_user = get_user(user_id)
             mode = parts[3].lower()
-            
             if mode in ["limited", "limitless"]:
                 target_user["deck_mode"] = mode
                 save_data()
-                await message.channel.send(f"Set deck mode for <@{user_id}> to: {mode}")
+                await message.channel.send(f"Set deck mode for <@{target_user_id}> to: {mode}")
             else:
                 await message.channel.send("Invalid mode. Choose 'limited' or 'limitless'.")
             return
@@ -636,12 +713,10 @@ Info: {card['info']}
                 return
             
             try:
-                user_id = parts[2].replace('<@', '').replace('>', '').replace('!', '')
-                target_user = get_user(user_id)
                 new_mp = int(parts[3])
                 target_user["mp"] = new_mp
                 save_data()
-                await message.channel.send(f"Set MP for <@{user_id}> to: {new_mp} Mp")
+                await message.channel.send(f"Set MP for <@{target_user_id}> to: {new_mp} Mp")
             except ValueError:
                 await message.channel.send("Please provide a valid number.")
             return
@@ -653,12 +728,10 @@ Info: {card['info']}
                 return
             
             try:
-                user_id = parts[2].replace('<@', '').replace('>', '').replace('!', '')
-                target_user = get_user(user_id)
                 new_recovery = int(parts[3])
                 target_user["mp_recovery"] = new_recovery
                 save_data()
-                await message.channel.send(f"Set MP recovery for <@{user_id}> to: {new_recovery} Mp per turn")
+                await message.channel.send(f"Set MP recovery for <@{target_user_id}> to: {new_recovery} Mp per turn")
             except ValueError:
                 await message.channel.send("Please provide a valid number.")
             return
