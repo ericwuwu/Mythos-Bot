@@ -110,8 +110,8 @@ def get_user(user_id):
 def format_card(card_num):
     card = card_library[card_num]
     if card["mp"] == "Variable":
-        return f"{card['name']} - Variable Mp ({card['type']})"
-    return f"{card['name']} - {card['mp']} Mp ({card['type']})"
+        return f"{card['name']} - Variable Mp"
+    return f"{card['name']} - {card['mp']} Mp"
 
 def format_hand(hand):
     if not hand:
@@ -210,7 +210,10 @@ async def on_message(message):
 `$num random #/all` - Randomize quantities
 `$mp turn` - Add MP recovery
 `$settings turn #` - Set MP recovery
-`$settings deck # limited/limitless` - Set deck mode
+`$settings deck limited/limitless` - Set deck mode
+`$settings deck @player limited/limitless` - Admin: Set another player's deck mode
+`$settings mp @player #` - Admin: Set another player's MP
+`$settings recovery @player #` - Admin: Set another player's MP recovery
 `$reset all` - Full reset for everyone
 `$x #` - Reroll cards (with category protection)
 `$r` - Roll d20
@@ -226,22 +229,44 @@ async def on_message(message):
         
         result = "**Card Library:**\n"
         if category == "all":
+            # Elements
+            result += "## Element ##\n"
             for num, card in card_library.items():
-                if card["mp"] == "Variable":
-                    result += f"{num}. {card['name']} - Variable Mp ({card['type']})\n"
-                else:
-                    result += f"{num}. {card['name']} - {card['mp']} Mp ({card['type']})\n"
+                if card["type"] == "Element":
+                    if card["mp"] == "Variable":
+                        result += f"{num}. {card['name']} - Variable Mp\n"
+                    else:
+                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
+            
+            # Shapes
+            result += "\n## Shape ##\n"
+            for num, card in card_library.items():
+                if card["type"] == "Shape":
+                    if card["mp"] == "Variable":
+                        result += f"{num}. {card['name']} - Variable Mp\n"
+                    else:
+                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
+            
+            # Commands
+            result += "\n## Command ##\n"
+            for num, card in card_library.items():
+                if card["type"] == "Command":
+                    if card["mp"] == "Variable":
+                        result += f"{num}. {card['name']} - Variable Mp\n"
+                    else:
+                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
         else:
             # Filter by category
             category_map = {"element": "Element", "shape": "Shape", "command": "Command"}
             cat_filter = category_map.get(category.lower(), category.capitalize())
             
+            result += f"## {cat_filter} ##\n"
             for num, card in card_library.items():
                 if card["type"] == cat_filter:
                     if card["mp"] == "Variable":
-                        result += f"{num}. {card['name']} - Variable Mp ({card['type']})\n"
+                        result += f"{num}. {card['name']} - Variable Mp\n"
                     else:
-                        result += f"{num}. {card['name']} - {card['mp']} Mp ({card['type']})\n"
+                        result += f"{num}. {card['name']} - {card['mp']} Mp\n"
         
         await message.channel.send(result[:2000])
         return
@@ -525,7 +550,7 @@ Info: {card['info']}
         await message.channel.send(f"**Rerolled Cards!** (Cost: {total_mp_cost} Mp)\n```\n{hand_display}```")
         return
 
-    # R COMMAND - Simple d20 roll
+    # R COMMAND - Simple d20 roll with proper responses
     if content.startswith('$r'):
         roll_result = random.randint(1, 20)
         
@@ -551,14 +576,71 @@ Info: {card['info']}
         await message.channel.send(f"Added {recovery} Mp! Current MP: {user['mp']} Mp")
         return
 
-    # SETTINGS COMMAND
+    # SETTINGS COMMAND - Updated with admin features
     if content.startswith('$settings'):
         parts = content.split()
         if len(parts) < 2:
-            await message.channel.send("Available settings:\n`$settings turn #` - Set MP recovery\n`$settings deck limited/limitless` - Set deck mode")
+            await message.channel.send("Available settings:\n`$settings turn #` - Set MP recovery\n`$settings deck limited/limitless` - Set deck mode\n`$settings deck @player limited/limitless` - Admin: Set another player's deck mode\n`$settings mp @player #` - Admin: Set another player's MP\n`$settings recovery @player #` - Admin: Set another player's MP recovery")
             return
         
-        if parts[1] == "turn":
+        # Check if user has admin permissions (can manage messages or is server admin)
+        is_admin = message.author.guild_permissions.manage_messages or message.author.guild_permissions.administrator
+        
+        # Admin command - set another player's deck mode
+        if parts[1] == "deck" and len(parts) >= 4 and parts[2].startswith('<@'):
+            if not is_admin:
+                await message.channel.send("You don't have permission to modify other players' settings.")
+                return
+            
+            # Extract user ID from mention
+            user_id = parts[2].replace('<@', '').replace('>', '').replace('!', '')
+            target_user = get_user(user_id)
+            mode = parts[3].lower()
+            
+            if mode in ["limited", "limitless"]:
+                target_user["deck_mode"] = mode
+                save_data()
+                await message.channel.send(f"Set deck mode for <@{user_id}> to: {mode}")
+            else:
+                await message.channel.send("Invalid mode. Choose 'limited' or 'limitless'.")
+            return
+        
+        # Admin command - set another player's MP
+        elif parts[1] == "mp" and len(parts) >= 4 and parts[2].startswith('<@'):
+            if not is_admin:
+                await message.channel.send("You don't have permission to modify other players' settings.")
+                return
+            
+            try:
+                user_id = parts[2].replace('<@', '').replace('>', '').replace('!', '')
+                target_user = get_user(user_id)
+                new_mp = int(parts[3])
+                target_user["mp"] = new_mp
+                save_data()
+                await message.channel.send(f"Set MP for <@{user_id}> to: {new_mp} Mp")
+            except ValueError:
+                await message.channel.send("Please provide a valid number.")
+            return
+        
+        # Admin command - set another player's MP recovery
+        elif parts[1] == "recovery" and len(parts) >= 4 and parts[2].startswith('<@'):
+            if not is_admin:
+                await message.channel.send("You don't have permission to modify other players' settings.")
+                return
+            
+            try:
+                user_id = parts[2].replace('<@', '').replace('>', '').replace('!', '')
+                target_user = get_user(user_id)
+                new_recovery = int(parts[3])
+                target_user["mp_recovery"] = new_recovery
+                save_data()
+                await message.channel.send(f"Set MP recovery for <@{user_id}> to: {new_recovery} Mp per turn")
+            except ValueError:
+                await message.channel.send("Please provide a valid number.")
+            return
+        
+        # User setting - set their own MP recovery
+        elif parts[1] == "turn":
             if len(parts) < 3:
                 await message.channel.send("Please specify a number. Example: `$settings turn 5`")
                 return
@@ -570,10 +652,8 @@ Info: {card['info']}
             except ValueError:
                 await message.channel.send("Please provide a valid number.")
         
-        elif parts[1] == "deck":
-            if len(parts) < 3:
-                await message.channel.send("Please specify 'limited' or 'limitless'. Example: `$settings deck limited`")
-                return
+        # User setting - set their own deck mode
+        elif parts[1] == "deck" and len(parts) >= 3:
             mode = parts[2].lower()
             if mode in ["limited", "limitless"]:
                 user["deck_mode"] = mode
