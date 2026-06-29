@@ -713,4 +713,33 @@ if __name__ == "__main__":
             print("4. Add a new variable:")
             print("   Key: DISCORD_BOT_TOKEN")
             print("   Value: [your bot token]")
-            print
+            print("5. Click 'Deploy' to restart with the new variable")
+            print("="*50)
+        else:
+            print("Attempting to connect to Discord...")
+            client.run(token)
+            
+    except discord.LoginFailure as e:
+        print("="*50)
+        print("LOGIN FAILED!")
+        print("="*50)
+        print(f"Error: {e}")
+        print("Your token is invalid or expired.")
+        print("1. Go to https://discord.com/developers/applications")
+        print("2. Select your application")
+        print("3. Go to 'Bot' section")
+        print("4. Click 'Reset Token'")
+        print("5. Copy the new token")
+        print("6. Update your Railway environment variable")
+        print("7. Deploy again")
+        print("="*50)
+    except discord.HTTPException as e:
+        if e.status == 429:
+            print("Rate limited - too many requests. Waiting a few minutes...")
+        else:
+            print(f"HTTP Exception: {e}")
+            raise e
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
