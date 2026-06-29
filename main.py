@@ -126,7 +126,7 @@ def format_active_deck(deck):
         return "Empty"
     result = ""
     for i, card_num in enumerate(deck, 1):
-        result += f"{i}. {format_card(card_num)}\n"
+        result += f"{card_num}. {format_card(card_num)}\n"  # Shows library number, not a separate numbered list
     return result
 
 def ensure_category_balance(hand):
@@ -201,6 +201,7 @@ async def on_message(message):
 `$library all/element/shape/command` - View cards by category
 `$info #` - Get card details
 `$add` (two lines: card_number quantity) - Add cards to inventory
+`$add @player` (two lines: card_number quantity) - Admin: Add cards to another player's inventory
 `$cards` - Check full inventory
 `$use # # #` - Put cards into active deck (takes from inventory)
 `$deck` - Show current active deck
@@ -296,9 +297,26 @@ Info: {card['info']}
             await message.channel.send("Please provide a valid number.")
         return
 
-    # ADD COMMAND - Two line format
+    # ADD COMMAND - Two line format (for self or admin for others)
     if content.startswith('$add'):
-        await message.channel.send("Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
+        parts = content.split()
+        target_user = None
+        target_user_id = None
+        
+        # Check if admin is adding to another player
+        if len(parts) >= 2 and parts[1].startswith('<@'):
+            is_admin = message.author.guild_permissions.manage_messages or message.author.guild_permissions.administrator
+            if not is_admin:
+                await message.channel.send("You don't have permission to add cards to other players.")
+                return
+            
+            # Extract user ID from mention
+            target_user_id = parts[1].replace('<@', '').replace('>', '').replace('!', '')
+            target_user = get_user(target_user_id)
+            await message.channel.send(f"Adding cards to <@{target_user_id}>. Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
+        else:
+            target_user = user
+            await message.channel.send("Please enter the card numbers and quantities (one per line):\nExample:\n`1 2`\n`2 3`")
         
         def check(m):
             return m.author == message.author and m.channel == message.channel
@@ -309,24 +327,24 @@ Info: {card['info']}
             
             added_cards = []
             for line in lines:
-                parts = line.strip().split()
-                if len(parts) >= 2:
+                parts2 = line.strip().split()
+                if len(parts2) >= 2:
                     try:
-                        card_num = int(parts[0])
-                        quantity = int(parts[1])
+                        card_num = int(parts2[0])
+                        quantity = int(parts2[1])
                         
                         if card_num not in card_library:
                             await message.channel.send(f"Card #{card_num} not found in library.")
                             continue
                         
-                        if user["deck_mode"] == "limited":
-                            if str(card_num) not in user["inventory"]:
-                                user["inventory"][str(card_num)] = 5
-                            user["inventory"][str(card_num)] += quantity
+                        if target_user["deck_mode"] == "limited":
+                            if str(card_num) not in target_user["inventory"]:
+                                target_user["inventory"][str(card_num)] = 5
+                            target_user["inventory"][str(card_num)] += quantity
                         else:
-                            if str(card_num) not in user["inventory"]:
-                                user["inventory"][str(card_num)] = 0
-                            user["inventory"][str(card_num)] += quantity
+                            if str(card_num) not in target_user["inventory"]:
+                                target_user["inventory"][str(card_num)] = 0
+                            target_user["inventory"][str(card_num)] += quantity
                         
                         added_cards.append(f"#{card_num} x{quantity}")
                     except ValueError:
@@ -334,7 +352,10 @@ Info: {card['info']}
             
             if added_cards:
                 save_data()
-                await message.channel.send(f"Added: {', '.join(added_cards)}\nUse `$use` to equip them to your active deck.")
+                if target_user_id:
+                    await message.channel.send(f"Added to <@{target_user_id}>: {', '.join(added_cards)}")
+                else:
+                    await message.channel.send(f"Added: {', '.join(added_cards)}\nUse `$use` to equip them to your active deck.")
             else:
                 await message.channel.send("No valid cards added.")
                 
@@ -455,6 +476,9 @@ Info: {card['info']}
             await message.channel.send("You have no cards in your active deck! Use `$use # # #` to add cards first.")
             return
         
+        # Show MP before drawing
+        mp_message = f"Current MP: {user['mp']} Mp"
+        
         drawn_cards = random.sample(user["active_deck"], min(6, len(user["active_deck"])))
         
         while len(drawn_cards) < 6:
@@ -476,7 +500,7 @@ Info: {card['info']}
         save_data()
         
         hand_display = format_hand(drawn_cards)
-        await message.channel.send(f"**Your Drawn Cards:**\n```\n{hand_display}```")
+        await message.channel.send(f"{mp_message}\n**Your Drawn Cards:**\n```\n{hand_display}```")
         return
 
     # HAND COMMAND
@@ -653,7 +677,7 @@ Info: {card['info']}
                 await message.channel.send("Please provide a valid number.")
         
         # User setting - set their own deck mode
-        elif parts[1] == "deck" and len(parts) >= 3:
+        elif parts[1] == "deck" and len(parts) >= 3 and not parts[2].startswith('<@'):
             mode = parts[2].lower()
             if mode in ["limited", "limitless"]:
                 user["deck_mode"] = mode
