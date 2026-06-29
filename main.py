@@ -64,8 +64,21 @@ card_library = {
     50: {"name": "Memory", "mp": "cost of card(s) copied +1/card", "type": "Command", "info": "copies cards used recently, the cards costing the mirrored cards' total mp +1 mp per card"}
 }
 
-# Default deck for new players (old default)
+# Default deck for new players (empty)
 DEFAULT_DECK = {
+    "mp": 10,
+    "mp_recovery": 4,
+    "mp_cap": 10,
+    "inventory": {},
+    "active_deck": [],
+    "deck_mode": "limitless",
+    "hand": [],
+    "bad_luck_streak": 0,
+    "good_luck_streak": 0
+}
+
+# The deck that $default gives you
+DEFAULT_GIVEN_DECK = {
     "mp": 10,
     "mp_recovery": 4,
     "mp_cap": 10,
@@ -138,22 +151,30 @@ def format_active_deck(deck):
         result += f"{card_num}. {format_card(card_num)}\n"
     return result
 
-def ensure_category_balance(hand):
-    """Ensure hand has at least one of each category (Element, Shape, Command)"""
-    categories = {"Element": 0, "Shape": 0, "Command": 0}
+def ensure_category_balance(hand, deck_categories):
+    """Ensure hand has at least one of each category present in the deck"""
+    # Get categories that exist in the deck
+    categories_present = set()
+    for card_num in deck_categories:
+        if card_num in card_library:
+            categories_present.add(card_library[card_num]["type"])
     
-    # Count current categories
+    if not categories_present:
+        return hand
+    
+    # Count current categories in hand
+    categories_in_hand = {"Element": 0, "Shape": 0, "Command": 0}
     for card_num in hand:
         if card_num in card_library:
             card_type = card_library[card_num]["type"]
-            if card_type in categories:
-                categories[card_type] += 1
+            if card_type in categories_in_hand:
+                categories_in_hand[card_type] += 1
     
-    # Check which categories are missing
-    missing_categories = [cat for cat, count in categories.items() if count == 0]
+    # Check which categories are missing from the hand but exist in the deck
+    missing_categories = [cat for cat in categories_present if categories_in_hand.get(cat, 0) == 0]
     
     if not missing_categories:
-        return hand  # All categories present
+        return hand
     
     # Replace duplicate categories with missing ones
     new_hand = hand.copy()
@@ -173,9 +194,9 @@ def ensure_category_balance(hand):
             if category_counts.get(card_type, 0) > 1:
                 # This category has duplicates, can replace one
                 for missing_cat in missing_categories:
-                    # Find a card of the missing category
-                    possible_cards = [num for num, card in card_library.items() 
-                                    if card["type"] == missing_cat and num not in new_hand]
+                    # Find a card of the missing category from the deck's available cards
+                    possible_cards = [num for num in deck_categories 
+                                    if num in card_library and card_library[num]["type"] == missing_cat and num not in new_hand]
                     if possible_cards:
                         new_hand[i] = random.choice(possible_cards)
                         category_counts[card_type] -= 1
@@ -238,6 +259,7 @@ async def on_message(message):
 `$cards` - Check full inventory
 `$cards @player` - Admin: Check another player's inventory
 `$use # # #` - Put cards into active deck
+`$use all` - Put one of all cards into active deck
 `$use @player # # #` - Admin: Put cards into another player's active deck
 `$deck` - Show current active deck
 `$deck @player` - Admin: Show another player's active deck
@@ -430,31 +452,47 @@ Info: {card['info']}
                 clean_parts.append(part)
         
         if len(clean_parts) < 2:
-            await message.channel.send("Please specify which cards to use. Example: `$use 1 2 3`")
+            await message.channel.send("Please specify which cards to use. Example: `$use 1 2 3` or `$use all`")
             return
         
         added_cards = []
-        for part in clean_parts[1:]:
-            try:
-                card_num = int(part)
-                if card_num not in card_library:
-                    await message.channel.send(f"Card #{card_num} not found in library.")
-                    continue
-                
-                if str(card_num) not in target_user["inventory"] or target_user["inventory"][str(card_num)] <= 0:
-                    await message.channel.send(f"You don't have card #{card_num} in your inventory.")
-                    continue
-                
-                target_user["active_deck"].append(card_num)
-                
-                if target_user["deck_mode"] == "limited":
-                    target_user["inventory"][str(card_num)] -= 1
-                    if target_user["inventory"][str(card_num)] <= 0:
-                        del target_user["inventory"][str(card_num)]
-                
-                added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
-            except ValueError:
-                await message.channel.send(f"Invalid card number: '{part}'")
+        
+        # Check if "all" is used
+        if clean_parts[1].lower() == "all":
+            # Add all cards from inventory (one of each)
+            for card_num_str, quantity in target_user["inventory"].items():
+                card_num = int(card_num_str)
+                if quantity > 0:
+                    # Check if card is already in active deck
+                    if card_num not in target_user["active_deck"]:
+                        target_user["active_deck"].append(card_num)
+                        if target_user["deck_mode"] == "limited":
+                            target_user["inventory"][str(card_num)] -= 1
+                            if target_user["inventory"][str(card_num)] <= 0:
+                                del target_user["inventory"][str(card_num)]
+                        added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
+        else:
+            # Add specific cards
+            for part in clean_parts[1:]:
+                try:
+                    card_num = int(part)
+                    if card_num not in card_library:
+                        await message.channel.send(f"Card #{card_num} not found in library.")
+                        continue
+                    
+                    if str(card_num) not in target_user["inventory"] or target_user["inventory"][str(card_num)] <= 0:
+                        await message.channel.send(f"You don't have card #{card_num} in your inventory.")
+                        continue
+                    
+                    if card_num not in target_user["active_deck"]:
+                        target_user["active_deck"].append(card_num)
+                        if target_user["deck_mode"] == "limited":
+                            target_user["inventory"][str(card_num)] -= 1
+                            if target_user["inventory"][str(card_num)] <= 0:
+                                del target_user["inventory"][str(card_num)]
+                        added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
+                except ValueError:
+                    await message.channel.send(f"Invalid card number: '{part}'")
         
         if added_cards:
             save_data()
@@ -464,7 +502,7 @@ Info: {card['info']}
             else:
                 await message.channel.send(f"Added to active deck: {', '.join(added_cards)}\n```\n{deck_display}```")
         else:
-            await message.channel.send("No valid cards added.")
+            await message.channel.send("No valid cards added. Make sure you have cards in your inventory.")
         return
 
     # DECK COMMAND - Show active deck
@@ -510,14 +548,13 @@ Info: {card['info']}
                     await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                     continue
                 
-                target_user["active_deck"].append(card_num)
-                
-                if target_user["deck_mode"] == "limited":
-                    target_user["inventory"][str(card_num)] -= 1
-                    if target_user["inventory"][str(card_num)] <= 0:
-                        del target_user["inventory"][str(card_num)]
-                
-                added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
+                if card_num not in target_user["active_deck"]:
+                    target_user["active_deck"].append(card_num)
+                    if target_user["deck_mode"] == "limited":
+                        target_user["inventory"][str(card_num)] -= 1
+                        if target_user["inventory"][str(card_num)] <= 0:
+                            del target_user["inventory"][str(card_num)]
+                    added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
             except ValueError:
                 await message.channel.send(f"Invalid card number: '{part}'")
         
@@ -543,21 +580,30 @@ Info: {card['info']}
         
         mp_message = f"Current MP: {target_user['mp']} Mp"
         
-        drawn_cards = random.sample(target_user["active_deck"], min(6, len(target_user["active_deck"])))
+        # Get the deck categories (cards available in active deck)
+        deck_categories = target_user["active_deck"].copy()
         
-        while len(drawn_cards) < 6:
-            available_cards = [int(k) for k, v in target_user["inventory"].items() if v > 0]
-            if available_cards:
-                new_card = random.choice(available_cards)
-                drawn_cards.append(new_card)
-                if target_user["deck_mode"] == "limited":
-                    target_user["inventory"][str(new_card)] -= 1
-                    if target_user["inventory"][str(new_card)] <= 0:
-                        del target_user["inventory"][str(new_card)]
-            else:
-                break
+        # Draw 6 cards from active deck (without replacement)
+        if len(target_user["active_deck"]) >= 6:
+            drawn_cards = random.sample(target_user["active_deck"], 6)
+        else:
+            drawn_cards = target_user["active_deck"].copy()
+            # If not enough cards, we can add more from inventory if available
+            while len(drawn_cards) < 6:
+                available_cards = [int(k) for k, v in target_user["inventory"].items() if v > 0 and int(k) not in drawn_cards]
+                if available_cards:
+                    new_card = random.choice(available_cards)
+                    drawn_cards.append(new_card)
+                    if target_user["deck_mode"] == "limited":
+                        target_user["inventory"][str(new_card)] -= 1
+                        if target_user["inventory"][str(new_card)] <= 0:
+                            del target_user["inventory"][str(new_card)]
+                else:
+                    break
         
-        drawn_cards = ensure_category_balance(drawn_cards)
+        # Ensure category balance based on what's available in the deck
+        drawn_cards = ensure_category_balance(drawn_cards, deck_categories)
+        
         target_user["hand"] = drawn_cards
         target_user["active_deck"] = []
         
@@ -593,13 +639,13 @@ Info: {card['info']}
             if not is_admin:
                 await message.channel.send("You don't have permission to reset another player's deck.")
                 return
-            target_user.update(DEFAULT_DECK.copy())
+            target_user.update(DEFAULT_GIVEN_DECK.copy())
             save_data()
             await message.channel.send(f"Reset <@{target_user_id}>'s deck to default!")
         else:
-            user.update(DEFAULT_DECK.copy())
+            user.update(DEFAULT_GIVEN_DECK.copy())
             save_data()
-            await message.channel.send("Your deck has been reset to default!")
+            await message.channel.send("Your deck has been reset to default!\nCards: Fire, Wind, Water, Earth, Ball, Bolt, Wall, Burst, Forward, Down, Spin, Split (5 copies each)")
         return
 
     # X COMMAND - Reroll cards
@@ -660,17 +706,35 @@ Info: {card['info']}
         
         target_user["mp"] -= total_mp_cost
         
+        # Get available cards from inventory for rerolling
+        available_cards = []
+        for card_num_str, quantity in target_user["inventory"].items():
+            card_num = int(card_num_str)
+            if quantity > 0:
+                available_cards.append(card_num)
+        
         for idx in indices:
             old_card = target_user["hand"][idx]
             old_type = card_library[old_card]["type"] if old_card in card_library else None
             
-            possible_cards = [num for num, card in card_library.items() 
-                            if card["type"] == old_type and num not in target_user["hand"]]
+            # Find a new card of the same type from available cards
+            possible_cards = [num for num in available_cards 
+                            if num in card_library and card_library[num]["type"] == old_type and num not in target_user["hand"]]
             if possible_cards:
                 new_card = random.choice(possible_cards)
                 target_user["hand"][idx] = new_card
+                # Remove from inventory if limited mode
+                if target_user["deck_mode"] == "limited":
+                    target_user["inventory"][str(new_card)] -= 1
+                    if target_user["inventory"][str(new_card)] <= 0:
+                        del target_user["inventory"][str(new_card)]
+                        # Remove from available cards if it reaches 0
+                        if new_card in available_cards:
+                            available_cards.remove(new_card)
         
-        target_user["hand"] = ensure_category_balance(target_user["hand"])
+        # Ensure category balance
+        deck_categories = list(card_library.keys())  # All cards available
+        target_user["hand"] = ensure_category_balance(target_user["hand"], deck_categories)
         
         save_data()
         
