@@ -273,6 +273,10 @@ async def on_message(message):
 `$num # +/-#` - Modify card quantities
 `$num random #/all` - Randomize quantities
 `$mp turn` - Add MP recovery
+`$mp + #` - Add MP (stops at cap)
+`$mp - #` - Subtract MP
+`$mp ++ #` - Add MP (goes over cap)
+`$mp max` - Set MP to max cap
 `$mp turn @player` - Admin: Add MP recovery for another player
 `$settings turn #` - Set MP recovery
 `$settings deck limited/limitless` - Set deck mode
@@ -392,16 +396,18 @@ Info: {card['info']}
                                 target_user["inventory"][str(card_num)] = 0
                             target_user["inventory"][str(card_num)] += quantity
                         
-                        added_cards.append(f"{card_library[card_num]['name']} x{quantity}")
+                        added_cards.append(f"{card_num} x{quantity}")
                     except ValueError:
                         await message.channel.send(f"Invalid input: '{line}'. Skipping.")
             
             if added_cards:
                 save_data()
+                # Format as new lines with card numbers
+                added_list = "\n".join(added_cards)
                 if target_user_id != user_id:
-                    await message.channel.send(f"Added to <@{target_user_id}>: {', '.join(added_cards)}")
+                    await message.channel.send(f"Added to <@{target_user_id}>:\n```\n{added_list}\n```")
                 else:
-                    await message.channel.send(f"Added: {', '.join(added_cards)}\nUse `$use` to equip them to your active deck.")
+                    await message.channel.send(f"Added:\n```\n{added_list}\n```\nUse `$use` to equip them to your active deck.")
             else:
                 await message.channel.send("No valid cards added.")
                 
@@ -765,21 +771,131 @@ Info: {card['info']}
             await message.channel.send(f'🎲 You rolled a d20 and got {roll_result} sheeeesh')
         return
 
-    # MP TURN COMMAND
-    if content.startswith('$mp turn'):
-        recovery = target_user["mp_recovery"]
-        old_mp = target_user["mp"]
-        target_user["mp"] += recovery
+    # MP COMMAND - New MP management
+    if content.startswith('$mp'):
+        parts = content.split()
         
-        if target_user["mp_cap"] > 0 and target_user["mp"] > target_user["mp_cap"]:
-            target_user["mp"] = target_user["mp_cap"]
+        if len(parts) < 2:
+            await message.channel.send("Usage:\n`$mp turn` - Add MP recovery\n`$mp + #` - Add MP (stops at cap)\n`$mp - #` - Subtract MP\n`$mp ++ #` - Add MP (goes over cap)\n`$mp max` - Set MP to max cap")
+            return
         
-        save_data()
-        mp_display = format_mp(target_user)
-        if target_user_id != user_id:
+        # Handle target user for admin
+        if len(parts) >= 3 and parts[1] == "turn" and parts[2].startswith('<@'):
+            if not is_admin:
+                await message.channel.send("You don't have permission to modify other players' MP.")
+                return
+            target_user_id = parts[2].replace('<@', '').replace('>', '').replace('!', '')
+            target_user = get_user(target_user_id)
+            recovery = target_user["mp_recovery"]
+            old_mp = target_user["mp"]
+            target_user["mp"] += recovery
+            
+            if target_user["mp_cap"] > 0 and target_user["mp"] > target_user["mp_cap"]:
+                target_user["mp"] = target_user["mp_cap"]
+            
+            save_data()
+            mp_display = format_mp(target_user)
             await message.channel.send(f"Added {recovery} Mp to <@{target_user_id}>! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            return
+        
+        # Regular MP commands
+        if parts[1] == "turn":
+            recovery = target_user["mp_recovery"]
+            old_mp = target_user["mp"]
+            target_user["mp"] += recovery
+            
+            if target_user["mp_cap"] > 0 and target_user["mp"] > target_user["mp_cap"]:
+                target_user["mp"] = target_user["mp_cap"]
+            
+            save_data()
+            mp_display = format_mp(target_user)
+            if target_user_id != user_id:
+                await message.channel.send(f"Added {recovery} Mp to <@{target_user_id}>! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            else:
+                await message.channel.send(f"Added {recovery} Mp! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            return
+        
+        elif parts[1] == "+":
+            if len(parts) < 3:
+                await message.channel.send("Please specify an amount. Example: `$mp + 5`")
+                return
+            
+            try:
+                amount = int(parts[2])
+                old_mp = target_user["mp"]
+                target_user["mp"] += amount
+                
+                # Stop at cap
+                if target_user["mp_cap"] > 0 and target_user["mp"] > target_user["mp_cap"]:
+                    target_user["mp"] = target_user["mp_cap"]
+                
+                save_data()
+                mp_display = format_mp(target_user)
+                if target_user_id != user_id:
+                    await message.channel.send(f"Added {amount} Mp to <@{target_user_id}>! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+                else:
+                    await message.channel.send(f"Added {amount} Mp! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            except ValueError:
+                await message.channel.send("Please provide a valid number.")
+            return
+        
+        elif parts[1] == "++":
+            if len(parts) < 3:
+                await message.channel.send("Please specify an amount. Example: `$mp ++ 5`")
+                return
+            
+            try:
+                amount = int(parts[2])
+                old_mp = target_user["mp"]
+                target_user["mp"] += amount
+                
+                # Goes over cap
+                # No cap check
+                
+                save_data()
+                mp_display = format_mp(target_user)
+                if target_user_id != user_id:
+                    await message.channel.send(f"Added {amount} Mp to <@{target_user_id}> (over cap)! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+                else:
+                    await message.channel.send(f"Added {amount} Mp (over cap)! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            except ValueError:
+                await message.channel.send("Please provide a valid number.")
+            return
+        
+        elif parts[1] == "-":
+            if len(parts) < 3:
+                await message.channel.send("Please specify an amount. Example: `$mp - 5`")
+                return
+            
+            try:
+                amount = int(parts[2])
+                old_mp = target_user["mp"]
+                target_user["mp"] -= amount
+                
+                save_data()
+                mp_display = format_mp(target_user)
+                if target_user_id != user_id:
+                    await message.channel.send(f"Subtracted {amount} Mp from <@{target_user_id}>! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+                else:
+                    await message.channel.send(f"Subtracted {amount} Mp! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            except ValueError:
+                await message.channel.send("Please provide a valid number.")
+            return
+        
+        elif parts[1] == "max":
+            old_mp = target_user["mp"]
+            target_user["mp"] = target_user["mp_cap"]
+            
+            save_data()
+            mp_display = format_mp(target_user)
+            if target_user_id != user_id:
+                await message.channel.send(f"Set <@{target_user_id}>'s MP to max! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            else:
+                await message.channel.send(f"Set MP to max! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            return
+        
         else:
-            await message.channel.send(f"Added {recovery} Mp! MP: {mp_display} ({old_mp} → {target_user['mp']})")
+            await message.channel.send("Unknown MP command. Usage:\n`$mp turn` - Add MP recovery\n`$mp + #` - Add MP (stops at cap)\n`$mp - #` - Subtract MP\n`$mp ++ #` - Add MP (goes over cap)\n`$mp max` - Set MP to max cap")
         return
 
     # SETTINGS COMMAND
