@@ -124,9 +124,31 @@ def save_data():
 def get_user(user_id):
     user_id = str(user_id)
     if user_id not in user_data:
-        user_data[user_id] = DEFAULT_DECK.copy()
+        user_data[user_id] = {
+            "mp": 10,
+            "mp_recovery": 4,
+            "mp_cap": 10,
+            "decks": {
+                "1": DEFAULT_GIVEN_DECK.copy(),
+                "2": DEFAULT_DECK.copy(),
+                "3": DEFAULT_DECK.copy(),
+                "4": DEFAULT_DECK.copy(),
+                "5": DEFAULT_DECK.copy()
+            },
+            "current_deck": "1",
+            "active_deck": [],
+            "hand": [],
+            "bad_luck_streak": 0,
+            "good_luck_streak": 0
+        }
         save_data()
     return user_data[user_id]
+
+def get_current_deck(user_data):
+    deck_num = user_data.get("current_deck", "1")
+    if deck_num not in user_data["decks"]:
+        deck_num = "1"
+    return user_data["decks"][deck_num]
 
 def format_card(card_num):
     card = card_library[card_num]
@@ -233,6 +255,7 @@ async def on_message(message):
     content = message.content
     user_id = str(message.author.id)
     user = get_user(user_id)
+    current_deck = get_current_deck(user)
     
     # Check if user is admin
     is_admin = message.author.guild_permissions.manage_messages or message.author.guild_permissions.administrator
@@ -246,11 +269,13 @@ async def on_message(message):
     if mentioned_users and is_admin:
         target_user_id = mentioned_users[0]
         target_user = get_user(target_user_id)
+        target_current_deck = get_current_deck(target_user)
     
     # If no target, use the command sender
     if not target_user:
         target_user = user
         target_user_id = user_id
+        target_current_deck = current_deck
     
     # HELP COMMAND
     if content.startswith('$help'):
@@ -278,6 +303,8 @@ async def on_message(message):
 `$mp ++5` - Add MP (goes over cap)
 `$mp max` - Set MP to max cap
 `$mp turn @player` - Admin: Add MP recovery for another player
+`$decks` - Show all 5 decks
+`$decks #` - Switch to deck #
 `$settings turn #` - Set MP recovery
 `$settings deck limited/limitless` - Set deck mode
 `$settings deck @player limited/limitless` - Admin: Set another player's deck mode
@@ -358,6 +385,48 @@ Info: {card['info']}
             await message.channel.send("Please provide a valid number.")
         return
 
+    # DECKS COMMAND - Show and switch decks
+    if content.startswith('$decks'):
+        parts = content.split()
+        
+        if len(parts) >= 2:
+            try:
+                deck_num = str(parts[1])
+                if deck_num in ["1", "2", "3", "4", "5"]:
+                    if target_user_id != user_id:
+                        if not is_admin:
+                            await message.channel.send("You don't have permission to modify another player's decks.")
+                            return
+                        target_user["current_deck"] = deck_num
+                        save_data()
+                        await message.channel.send(f"Switched <@{target_user_id}> to deck {deck_num}")
+                    else:
+                        user["current_deck"] = deck_num
+                        save_data()
+                        await message.channel.send(f"Switched to deck {deck_num}")
+                else:
+                    await message.channel.send("Invalid deck number. Use 1-5.")
+            except ValueError:
+                await message.channel.send("Invalid deck number. Use 1-5.")
+            return
+        else:
+            # Show all decks
+            result = f"**{message.author.display_name}'s Decks:**\n"
+            result += f"Current Deck: {target_user['current_deck']}\n\n"
+            
+            for deck_num in ["1", "2", "3", "4", "5"]:
+                deck = target_user["decks"].get(deck_num, DEFAULT_DECK.copy())
+                inventory = deck.get("inventory", {})
+                card_count = len(inventory)
+                total_cards = sum(inventory.values()) if inventory else 0
+                result += f"Deck {deck_num}: {card_count} card types, {total_cards} total cards"
+                if deck_num == target_user["current_deck"]:
+                    result += " (Active)"
+                result += "\n"
+            
+            await message.channel.send(result)
+        return
+
     # ADD COMMAND
     if content.startswith('$add'):
         # Remove the command and mention from content for the prompt
@@ -387,14 +456,14 @@ Info: {card['info']}
                             await message.channel.send(f"Card #{card_num} not found in library.")
                             continue
                         
-                        if target_user["deck_mode"] == "limited":
-                            if str(card_num) not in target_user["inventory"]:
-                                target_user["inventory"][str(card_num)] = 5
-                            target_user["inventory"][str(card_num)] += quantity
+                        if target_current_deck["deck_mode"] == "limited":
+                            if str(card_num) not in target_current_deck["inventory"]:
+                                target_current_deck["inventory"][str(card_num)] = 5
+                            target_current_deck["inventory"][str(card_num)] += quantity
                         else:
-                            if str(card_num) not in target_user["inventory"]:
-                                target_user["inventory"][str(card_num)] = 0
-                            target_user["inventory"][str(card_num)] += quantity
+                            if str(card_num) not in target_current_deck["inventory"]:
+                                target_current_deck["inventory"][str(card_num)] = 0
+                            target_current_deck["inventory"][str(card_num)] += quantity
                         
                         added_cards.append(f"{card_num}. {card_library[card_num]['name']} x{quantity}")
                     except ValueError:
@@ -405,9 +474,9 @@ Info: {card['info']}
                 # Format as new lines with card numbers and names
                 added_list = "\n".join(added_cards)
                 if target_user_id != user_id:
-                    await message.channel.send(f"Added to <@{target_user_id}>:\n```\n{added_list}\n```")
+                    await message.channel.send(f"Added to <@{target_user_id}>'s deck {target_user['current_deck']}:\n```\n{added_list}\n```")
                 else:
-                    await message.channel.send(f"Added:\n```\n{added_list}\n```\nUse `$use` to equip them to your active deck.")
+                    await message.channel.send(f"Added to deck {user['current_deck']}:\n```\n{added_list}\n```\nUse `$use` to equip them to your active deck.")
             else:
                 await message.channel.send("No valid cards added.")
                 
@@ -418,32 +487,32 @@ Info: {card['info']}
     # CARDS COMMAND (Inventory)
     if content.startswith('$cards'):
         if target_user_id != user_id:
-            inventory = target_user["inventory"]
+            inventory = target_current_deck["inventory"]
             if not inventory:
                 await message.channel.send(f"<@{target_user_id}>'s inventory is empty.")
                 return
             
-            result = f"**<@{target_user_id}>'s Cards (Inventory):**\n"
+            result = f"**<@{target_user_id}>'s Cards (Inventory) - Deck {target_user['current_deck']}:**\n"
             for card_num, quantity in inventory.items():
                 card_num = int(card_num)
                 if card_num in card_library:
                     card = card_library[card_num]
-                    if target_user["deck_mode"] == "limitless":
+                    if target_current_deck["deck_mode"] == "limitless":
                         result += f"{card_num}. {card['name']} - ∞ (Limitless)\n"
                     else:
                         result += f"{card_num}. {card['name']} - {quantity}x\n"
         else:
-            inventory = user["inventory"]
+            inventory = target_current_deck["inventory"]
             if not inventory:
                 await message.channel.send("Your inventory is empty. Use `$add` to add cards.")
                 return
             
-            result = "**Your Cards (Inventory):**\n"
+            result = f"**Your Cards (Inventory) - Deck {user['current_deck']}:**\n"
             for card_num, quantity in inventory.items():
                 card_num = int(card_num)
                 if card_num in card_library:
                     card = card_library[card_num]
-                    if user["deck_mode"] == "limitless":
+                    if target_current_deck["deck_mode"] == "limitless":
                         result += f"{card_num}. {card['name']} - ∞ (Limitless)\n"
                     else:
                         result += f"{card_num}. {card['name']} - {quantity}x\n"
@@ -470,16 +539,16 @@ Info: {card['info']}
         # Check if "all" is used
         if clean_parts[1].lower() == "all":
             # Add all cards from inventory (one of each)
-            for card_num_str, quantity in target_user["inventory"].items():
+            for card_num_str, quantity in target_current_deck["inventory"].items():
                 card_num = int(card_num_str)
                 if quantity > 0:
                     # Check if card is already in active deck
                     if card_num not in target_user["active_deck"]:
                         target_user["active_deck"].append(card_num)
-                        if target_user["deck_mode"] == "limited":
-                            target_user["inventory"][str(card_num)] -= 1
-                            if target_user["inventory"][str(card_num)] <= 0:
-                                del target_user["inventory"][str(card_num)]
+                        if target_current_deck["deck_mode"] == "limited":
+                            target_current_deck["inventory"][str(card_num)] -= 1
+                            if target_current_deck["inventory"][str(card_num)] <= 0:
+                                del target_current_deck["inventory"][str(card_num)]
                         added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
         else:
             # Add specific cards
@@ -490,16 +559,16 @@ Info: {card['info']}
                         await message.channel.send(f"Card #{card_num} not found in library.")
                         continue
                     
-                    if str(card_num) not in target_user["inventory"] or target_user["inventory"][str(card_num)] <= 0:
+                    if str(card_num) not in target_current_deck["inventory"] or target_current_deck["inventory"][str(card_num)] <= 0:
                         await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                         continue
                     
                     if card_num not in target_user["active_deck"]:
                         target_user["active_deck"].append(card_num)
-                        if target_user["deck_mode"] == "limited":
-                            target_user["inventory"][str(card_num)] -= 1
-                            if target_user["inventory"][str(card_num)] <= 0:
-                                del target_user["inventory"][str(card_num)]
+                        if target_current_deck["deck_mode"] == "limited":
+                            target_current_deck["inventory"][str(card_num)] -= 1
+                            if target_current_deck["inventory"][str(card_num)] <= 0:
+                                del target_current_deck["inventory"][str(card_num)]
                         added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
                 except ValueError:
                     await message.channel.send(f"Invalid card number: '{part}'")
@@ -554,16 +623,16 @@ Info: {card['info']}
                     await message.channel.send(f"Card #{card_num} not found in library.")
                     continue
                 
-                if str(card_num) not in target_user["inventory"] or target_user["inventory"][str(card_num)] <= 0:
+                if str(card_num) not in target_current_deck["inventory"] or target_current_deck["inventory"][str(card_num)] <= 0:
                     await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                     continue
                 
                 if card_num not in target_user["active_deck"]:
                     target_user["active_deck"].append(card_num)
-                    if target_user["deck_mode"] == "limited":
-                        target_user["inventory"][str(card_num)] -= 1
-                        if target_user["inventory"][str(card_num)] <= 0:
-                            del target_user["inventory"][str(card_num)]
+                    if target_current_deck["deck_mode"] == "limited":
+                        target_current_deck["inventory"][str(card_num)] -= 1
+                        if target_current_deck["inventory"][str(card_num)] <= 0:
+                            del target_current_deck["inventory"][str(card_num)]
                     added_cards.append(f"{card_library[card_num]['name']} (#{card_num})")
             except ValueError:
                 await message.channel.send(f"Invalid card number: '{part}'")
@@ -598,14 +667,14 @@ Info: {card['info']}
             drawn_cards = target_user["active_deck"].copy()
             # If not enough cards, we can add more from inventory if available
             while len(drawn_cards) < 6:
-                available_cards = [int(k) for k, v in target_user["inventory"].items() if v > 0 and int(k) not in drawn_cards]
+                available_cards = [int(k) for k, v in target_current_deck["inventory"].items() if v > 0 and int(k) not in drawn_cards]
                 if available_cards:
                     new_card = random.choice(available_cards)
                     drawn_cards.append(new_card)
-                    if target_user["deck_mode"] == "limited":
-                        target_user["inventory"][str(new_card)] -= 1
-                        if target_user["inventory"][str(new_card)] <= 0:
-                            del target_user["inventory"][str(new_card)]
+                    if target_current_deck["deck_mode"] == "limited":
+                        target_current_deck["inventory"][str(new_card)] -= 1
+                        if target_current_deck["inventory"][str(new_card)] <= 0:
+                            del target_current_deck["inventory"][str(new_card)]
                 else:
                     break
         
@@ -642,20 +711,20 @@ Info: {card['info']}
             await message.channel.send(f"**Your Current Hand:**\nMP: {mp_display}\n```\n{hand_display}```")
         return
 
-    # DEFAULT COMMAND - Reset to default deck
+    # DEFAULT COMMAND - Reset current deck to default
     if content.startswith('$default'):
         # Check if targeting another player (admin only)
         if target_user_id != user_id:
             if not is_admin:
                 await message.channel.send("You don't have permission to reset another player's deck.")
                 return
-            target_user.update(DEFAULT_GIVEN_DECK.copy())
+            target_current_deck.update(DEFAULT_GIVEN_DECK.copy())
             save_data()
-            await message.channel.send(f"Reset <@{target_user_id}>'s deck to default!\nCards: Fire, Wind, Water, Earth, Ball, Bolt, Wall, Burst, Forward, Down, Spin, Split (5 copies each)")
+            await message.channel.send(f"Reset <@{target_user_id}>'s deck {target_user['current_deck']} to default!\nCards: Fire, Wind, Water, Earth, Ball, Bolt, Wall, Burst, Forward, Down, Spin, Split (5 copies each)")
         else:
-            user.update(DEFAULT_GIVEN_DECK.copy())
+            target_current_deck.update(DEFAULT_GIVEN_DECK.copy())
             save_data()
-            await message.channel.send("Your deck has been reset to default!\nCards: Fire, Wind, Water, Earth, Ball, Bolt, Wall, Burst, Forward, Down, Spin, Split (5 copies each)")
+            await message.channel.send(f"Your deck {user['current_deck']} has been reset to default!\nCards: Fire, Wind, Water, Earth, Ball, Bolt, Wall, Burst, Forward, Down, Spin, Split (5 copies each)")
         return
 
     # X COMMAND - Reroll cards
@@ -719,7 +788,7 @@ Info: {card['info']}
         
         # Get available cards from inventory for rerolling
         available_cards = []
-        for card_num_str, quantity in target_user["inventory"].items():
+        for card_num_str, quantity in target_current_deck["inventory"].items():
             card_num = int(card_num_str)
             if quantity > 0:
                 available_cards.append(card_num)
@@ -735,10 +804,10 @@ Info: {card['info']}
                 new_card = random.choice(possible_cards)
                 target_user["hand"][idx] = new_card
                 # Remove from inventory if limited mode
-                if target_user["deck_mode"] == "limited":
-                    target_user["inventory"][str(new_card)] -= 1
-                    if target_user["inventory"][str(new_card)] <= 0:
-                        del target_user["inventory"][str(new_card)]
+                if target_current_deck["deck_mode"] == "limited":
+                    target_current_deck["inventory"][str(new_card)] -= 1
+                    if target_current_deck["inventory"][str(new_card)] <= 0:
+                        del target_current_deck["inventory"][str(new_card)]
                         # Remove from available cards if it reaches 0
                         if new_card in available_cards:
                             available_cards.remove(new_card)
@@ -907,9 +976,9 @@ Info: {card['info']}
             
             mode = parts[3].lower()
             if mode in ["limited", "limitless"]:
-                target_user["deck_mode"] = mode
+                target_current_deck["deck_mode"] = mode
                 save_data()
-                await message.channel.send(f"Set deck mode for <@{target_user_id}> to: {mode}")
+                await message.channel.send(f"Set deck mode for <@{target_user_id}>'s deck {target_user['current_deck']} to: {mode}")
             else:
                 await message.channel.send("Invalid mode. Choose 'limited' or 'limitless'.")
             return
@@ -963,9 +1032,9 @@ Info: {card['info']}
         elif parts[1] == "deck" and len(parts) >= 3 and not parts[2].startswith('<@'):
             mode = parts[2].lower()
             if mode in ["limited", "limitless"]:
-                user["deck_mode"] = mode
+                target_current_deck["deck_mode"] = mode
                 save_data()
-                await message.channel.send(f"Deck mode set to: {mode}")
+                await message.channel.send(f"Deck mode for deck {user['current_deck']} set to: {mode}")
             else:
                 await message.channel.send("Invalid mode. Choose 'limited' or 'limitless'.")
         return
@@ -973,27 +1042,31 @@ Info: {card['info']}
     # SAVE COMMAND - Show stats and inventory in copyable format
     if content.startswith('$save'):
         if target_user_id != user_id:
-            await message.channel.send(f"**<@{target_user_id}>'s Stats:**")
+            await message.channel.send(f"**<@{target_user_id}>'s Stats - Deck {target_user['current_deck']}:**")
         
-        # Build the stats display
-        stats = f"Max Mp: {target_user['mp_cap']}\n"
+        # Build the stats display with card names
+        deck_num = target_user['current_deck']
+        stats = f"Deck: {deck_num}\n"
+        stats += f"Max Mp: {target_user['mp_cap']}\n"
         stats += f"Mp Recovery: {target_user['mp_recovery']}\n"
-        stats += f"Deck Mode: {target_user['deck_mode']}\n"
+        stats += f"Deck Mode: {target_current_deck['deck_mode']}\n"
         stats += f"Current MP: {format_mp(target_user)}\n\n"
         stats += "**Inventory:**\n"
         
         # Sort inventory by card number
-        sorted_inventory = sorted(target_user["inventory"].items(), key=lambda x: int(x[0]))
+        sorted_inventory = sorted(target_current_deck["inventory"].items(), key=lambda x: int(x[0]))
         
+        # Show with card names
         for card_num, quantity in sorted_inventory:
             card_num_int = int(card_num)
             if card_num_int in card_library:
-                stats += f"{card_num} {quantity}\n"
+                card = card_library[card_num_int]
+                stats += f"{card_num}. {card['name']} - {quantity}x\n"
         
         # Send the stats
         await message.channel.send(f"```\n{stats}```")
         
-        # Send copyable format for $add
+        # Send copyable format for $add (numbers only)
         copyable = "**Copy this to restore your deck with `$add`:**\n```\n"
         for card_num, quantity in sorted_inventory:
             copyable += f"{card_num} {quantity}\n"
@@ -1037,18 +1110,18 @@ Info: {card['info']}
                 return
             
             if parts[2] == "all":
-                for card_num in user["inventory"]:
-                    user["inventory"][card_num] = random.randint(1, 10)
+                for card_num in target_current_deck["inventory"]:
+                    target_current_deck["inventory"][card_num] = random.randint(1, 10)
                 save_data()
                 await message.channel.send("All card quantities randomized!")
                 return
             else:
                 try:
                     card_num = int(parts[2])
-                    if str(card_num) not in user["inventory"]:
+                    if str(card_num) not in target_current_deck["inventory"]:
                         await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                         return
-                    user["inventory"][str(card_num)] = random.randint(1, 10)
+                    target_current_deck["inventory"][str(card_num)] = random.randint(1, 10)
                     save_data()
                     await message.channel.send(f"Card #{card_num} quantity randomized!")
                 except ValueError:
@@ -1060,17 +1133,17 @@ Info: {card['info']}
                 card_num = int(parts[1])
                 change = int(parts[2])
                 
-                if str(card_num) not in user["inventory"]:
+                if str(card_num) not in target_current_deck["inventory"]:
                     await message.channel.send(f"You don't have card #{card_num} in your inventory.")
                     return
                 
-                user["inventory"][str(card_num)] += change
+                target_current_deck["inventory"][str(card_num)] += change
                 
-                if user["inventory"][str(card_num)] <= 0:
-                    del user["inventory"][str(card_num)]
+                if target_current_deck["inventory"][str(card_num)] <= 0:
+                    del target_current_deck["inventory"][str(card_num)]
                     await message.channel.send(f"Card #{card_num} removed from inventory.")
                 else:
-                    await message.channel.send(f"Card #{card_num} quantity is now {user['inventory'][str(card_num)]}")
+                    await message.channel.send(f"Card #{card_num} quantity is now {target_current_deck['inventory'][str(card_num)]}")
                 
                 save_data()
             except ValueError:
